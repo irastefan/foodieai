@@ -75,7 +75,7 @@ export class McpController {
   async handleMcp(@Body() body: unknown) {
     return this.handleJsonRpc(body);
   }
-
+  
   // Core JSON-RPC router for MCP methods.
   private async handleJsonRpc(body: unknown) {
     const id = this.extractId(body);
