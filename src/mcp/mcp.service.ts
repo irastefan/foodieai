@@ -15,8 +15,10 @@ export class McpValidationError extends Error {
 
 @Injectable()
 export class McpService {
+  // MCP tool definitions and thin wrappers around product operations.
   constructor(private readonly productsService: ProductsService) {}
 
+  // Tool catalog exposed via tools/list.
   listTools() {
     return [
       {
@@ -89,16 +91,19 @@ export class McpService {
     ];
   }
 
+  // MCP tool: product.createManual
   async createManual(args: Record<string, unknown>) {
     const dto = await this.validateDto(CreateProductDto, args);
     return this.productsService.createManual(dto);
   }
 
+  // MCP tool: product.search
   async search(args: Record<string, unknown>) {
     const query = typeof args.query === "string" ? args.query : undefined;
     return this.productsService.search(query);
   }
 
+  // Shared DTO validation for MCP tool args.
   private async validateDto<T extends object>(
     dtoClass: new () => T,
     payload: Record<string, unknown> | undefined,

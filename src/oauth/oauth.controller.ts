@@ -4,8 +4,10 @@ import { OauthService } from "./oauth.service";
 
 @Controller("oauth")
 export class OauthController {
+  // Minimal OAuth endpoints for ChatGPT connector (auth code + token).
   constructor(private readonly oauthService: OauthService) {}
 
+  // Authorization endpoint: issues short-lived auth code.
   @Get("authorize")
   authorize(
     @Query() query: Record<string, string | undefined>,
@@ -35,6 +37,7 @@ export class OauthController {
   }
 
   @Post("token")
+  // Token endpoint: exchanges auth code for access token.
   token(
     @Body() body: Record<string, string | undefined>,
     @Headers("authorization") authorization: string | undefined,

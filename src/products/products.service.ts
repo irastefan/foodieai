@@ -11,8 +11,10 @@ import { CreateProductDto } from "./dto/create-product.dto";
 
 @Injectable()
 export class ProductsService {
+  // Product persistence and query logic.
   constructor(private readonly prisma: PrismaService) {}
 
+  // Create a product with MVP defaults (GLOBAL/VERIFIED/INTERNAL).
   async createManual(dto: CreateProductDto): Promise<Product> {
     const normalizedName = this.normalizeName(dto.name);
     return this.prisma.product.create({
@@ -31,6 +33,7 @@ export class ProductsService {
     });
   }
 
+  // Search by name/brand (case-insensitive).
   async search(query?: string): Promise<Product[]> {
     const where: Prisma.ProductWhereInput | undefined = query
       ? {
@@ -48,6 +51,7 @@ export class ProductsService {
     });
   }
 
+  // Normalize product names for basic matching.
   private normalizeName(value: string) {
     return value.trim().toLowerCase();
   }

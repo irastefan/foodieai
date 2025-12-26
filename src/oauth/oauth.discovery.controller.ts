@@ -2,6 +2,7 @@ import { Controller, Get, Headers } from "@nestjs/common";
 
 @Controller()
 export class OauthDiscoveryController {
+  // OAuth discovery document used by MCP clients.
   @Get(".well-known/oauth-authorization-server")
   oauthAuthorizationServer(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
@@ -23,6 +24,7 @@ export class OauthDiscoveryController {
     };
   }
 
+  // Same discovery doc with /mcp suffix (client-specific path).
   @Get(".well-known/oauth-authorization-server/mcp")
   oauthAuthorizationServerForMcp(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
@@ -32,6 +34,7 @@ export class OauthDiscoveryController {
     return this.oauthAuthorizationServer(forwardedProto, forwardedHost, host);
   }
 
+  // OIDC discovery document (subset) for clients expecting it.
   @Get(".well-known/openid-configuration")
   openIdConfiguration(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
@@ -53,6 +56,7 @@ export class OauthDiscoveryController {
     };
   }
 
+  // Same OIDC discovery doc with /mcp suffix (client-specific path).
   @Get(".well-known/openid-configuration/mcp")
   openIdConfigurationForMcp(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,

@@ -6,14 +6,17 @@ import { McpService, McpValidationError } from "./mcp.service";
 @ApiTags("mcp")
 @Controller("mcp")
 export class McpController {
+  // MCP JSON-RPC entrypoint and status ping for ChatGPT connector.
   constructor(private readonly mcpService: McpService) {}
 
+  // Public health/status check for the MCP server.
   @Get()
   @ApiOperation({ summary: "MCP status ping" })
   getStatus() {
     return { name: "FoodieAI MCP", status: "ok" };
   }
 
+  // MCP JSON-RPC v2 endpoint (tools/list, tools/call, initialize).
   @Post()
   @ApiOperation({ summary: "MCP JSON-RPC endpoint" })
   @ApiBody({
@@ -66,6 +69,7 @@ export class McpController {
     return this.handleJsonRpc(body);
   }
 
+  // Core JSON-RPC router for MCP methods.
   private async handleJsonRpc(body: unknown) {
     const id = this.extractId(body);
     if (!this.isValidRequest(body)) {
@@ -129,7 +133,6 @@ export class McpController {
             const product = await this.mcpService.createManual(
               args as Record<string, unknown>,
             );
-            const productJson = JSON.stringify(product);
             return {
               jsonrpc: "2.0",
               id,
@@ -139,7 +142,7 @@ export class McpController {
                     type: "text",
                     text: `✅ Product created: ${product.name}`,
                   },
-                  { type: "text", text: productJson },
+                  { type: "json", json: product },
                 ],
                 isError: false,
               },
@@ -150,13 +153,12 @@ export class McpController {
             args as Record<string, unknown>,
           );
           const payload = formatSearchResult(results);
-          const resultsJson = JSON.stringify(payload);
           return {
             jsonrpc: "2.0",
             id,
             result: {
               content: [
-                { type: "text", text: resultsJson },
+                { type: "json", json: payload },
               ],
               isError: false,
             },

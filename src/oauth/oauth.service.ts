@@ -16,9 +16,11 @@ type AccessTokenRecord = {
 
 @Injectable()
 export class OauthService {
+  // In-memory OAuth codes and access tokens (MVP, non-persistent).
   private readonly codes = new Map<string, AuthCodeRecord>();
   private readonly tokens = new Map<string, AccessTokenRecord>();
 
+  // Create a short-lived authorization code.
   createAuthCode(clientId: string, redirectUri: string, scope?: string) {
     const code = randomUUID();
     const expiresAt = Date.now() + 10 * 60 * 1000;
@@ -26,6 +28,7 @@ export class OauthService {
     return code;
   }
 
+  // Validate and consume an auth code (one-time use).
   consumeAuthCode(code: string, clientId: string, redirectUri: string) {
     const record = this.codes.get(code);
     if (!record) {
@@ -42,6 +45,7 @@ export class OauthService {
     return record;
   }
 
+  // Issue a short-lived access token.
   issueAccessToken(clientId: string, scope?: string) {
     const token = randomUUID();
     const expiresAt = Date.now() + 60 * 60 * 1000;
@@ -49,6 +53,7 @@ export class OauthService {
     return { token, expiresAt };
   }
 
+  // Validate access token.
   validateAccessToken(token: string) {
     const record = this.tokens.get(token);
     if (!record) {
