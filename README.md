@@ -50,6 +50,23 @@ curl -s -X POST http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"product.search","arguments":{"query":"yogurt"}}}'
 ```
 
+Example response (content text is JSON):
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"count\":1,\"items\":[{\"id\":\"prod_1\",\"name\":\"Salmon\",\"brand\":null,\"price\":null,\"currency\":null,\"store\":null,\"url\":null,\"image_url\":null,\"nutrition\":{\"kcal100\":208,\"protein100\":20,\"fat100\":13,\"carbs100\":0}}]}"
+      }
+    ],
+    "isError": false
+  }
+}
+```
+
 ### tools/call product.createManual (requires Bearer)
 ```bash
 curl -s -X POST http://localhost:3000/mcp \

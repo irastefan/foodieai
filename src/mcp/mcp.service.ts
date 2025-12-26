@@ -49,6 +49,42 @@ export class McpService {
           },
           required: [],
         },
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            count: { type: "number" },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  id: { type: "string" },
+                  name: { type: "string" },
+                  brand: { type: ["string", "null"] },
+                  price: { type: ["number", "null"] },
+                  currency: { type: ["string", "null"] },
+                  store: { type: ["string", "null"] },
+                  url: { type: ["string", "null"] },
+                  image_url: { type: ["string", "null"] },
+                  nutrition: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      kcal100: { type: ["number", "null"] },
+                      protein100: { type: ["number", "null"] },
+                      fat100: { type: ["number", "null"] },
+                      carbs100: { type: ["number", "null"] },
+                    },
+                  },
+                },
+                required: ["id", "name", "brand", "price", "currency", "store", "url", "image_url"],
+              },
+            },
+          },
+          required: ["count", "items"],
+        },
       },
     ];
   }

@@ -9,7 +9,8 @@
     "start:prod": "node dist/main.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "test": "node -r ts-node/register test/mcp-search.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

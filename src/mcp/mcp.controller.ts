@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { formatSearchResult } from "./mcp.mapper";
 import { McpService, McpValidationError } from "./mcp.service";
 
 @ApiTags("mcp")
@@ -148,13 +149,13 @@ export class McpController {
           const results = await this.mcpService.search(
             args as Record<string, unknown>,
           );
-          const resultsJson = JSON.stringify(results);
+          const payload = formatSearchResult(results);
+          const resultsJson = JSON.stringify(payload);
           return {
             jsonrpc: "2.0",
             id,
             result: {
               content: [
-                { type: "text", text: `Found ${results.length} products` },
                 { type: "text", text: resultsJson },
               ],
               isError: false,
