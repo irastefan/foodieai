@@ -1,9 +1,15 @@
 import { Controller, Get, Headers } from "@nestjs/common";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
+@ApiTags("oauth")
 @Controller()
 export class OauthDiscoveryController {
   // OAuth discovery document used by MCP clients.
   @Get(".well-known/oauth-authorization-server")
+  @ApiOperation({
+    summary: "OAuth discovery",
+    description: "Returns OAuth authorization server metadata (RFC 8414).",
+  })
   oauthAuthorizationServer(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
@@ -26,6 +32,10 @@ export class OauthDiscoveryController {
 
   // Same discovery doc with /mcp suffix (client-specific path).
   @Get(".well-known/oauth-authorization-server/mcp")
+  @ApiOperation({
+    summary: "OAuth discovery (MCP path)",
+    description: "Same metadata as oauth-authorization-server for MCP clients.",
+  })
   oauthAuthorizationServerForMcp(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
@@ -36,6 +46,10 @@ export class OauthDiscoveryController {
 
   // OIDC discovery document (subset) for clients expecting it.
   @Get(".well-known/openid-configuration")
+  @ApiOperation({
+    summary: "OpenID discovery",
+    description: "Returns a minimal OpenID configuration document.",
+  })
   openIdConfiguration(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
@@ -58,6 +72,10 @@ export class OauthDiscoveryController {
 
   // Same OIDC discovery doc with /mcp suffix (client-specific path).
   @Get(".well-known/openid-configuration/mcp")
+  @ApiOperation({
+    summary: "OpenID discovery (MCP path)",
+    description: "Same OpenID metadata for MCP clients.",
+  })
   openIdConfigurationForMcp(
     @Headers("x-forwarded-proto") forwardedProto: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,

@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Headers, Post, Query, Res } from "@nestjs/common";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Response } from "express";
 import { OauthService } from "./oauth.service";
 
+@ApiTags("oauth")
 @Controller("oauth")
 export class OauthController {
   // Minimal OAuth endpoints for ChatGPT connector (auth code + token).
@@ -9,6 +11,11 @@ export class OauthController {
 
   // Authorization endpoint: issues short-lived auth code.
   @Get("authorize")
+  @ApiOperation({
+    summary: "OAuth authorize",
+    description:
+      "Issues a short-lived authorization code and redirects to redirect_uri with code and state.",
+  })
   authorize(
     @Query() query: Record<string, string | undefined>,
     @Res() res: Response,
@@ -38,6 +45,11 @@ export class OauthController {
 
   @Post("token")
   // Token endpoint: exchanges auth code for access token.
+  @ApiOperation({
+    summary: "OAuth token",
+    description:
+      "Exchanges an authorization code for a short-lived access token (Bearer).",
+  })
   token(
     @Body() body: Record<string, string | undefined>,
     @Headers("authorization") authorization: string | undefined,

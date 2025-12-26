@@ -11,14 +11,21 @@ export class McpController {
 
   // Public health/status check for the MCP server.
   @Get()
-  @ApiOperation({ summary: "MCP status ping" })
+  @ApiOperation({
+    summary: "MCP status ping",
+    description: "Public ping endpoint used to verify MCP server availability.",
+  })
   getStatus() {
     return { name: "FoodieAI MCP", status: "ok" };
   }
 
   // MCP JSON-RPC v2 endpoint (tools/list, tools/call, initialize).
   @Post()
-  @ApiOperation({ summary: "MCP JSON-RPC endpoint" })
+  @ApiOperation({
+    summary: "MCP JSON-RPC endpoint",
+    description:
+      "Handles MCP methods: initialize, tools/list, tools/call, resources/list, prompts/list.",
+  })
   @ApiBody({
     schema: { type: "object" },
     examples: {

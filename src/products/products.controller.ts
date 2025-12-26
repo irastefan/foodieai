@@ -11,14 +11,22 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   // Create a product manually (MVP).
-  @ApiOperation({ summary: "Create product manually" })
+  @ApiOperation({
+    summary: "Create product manually",
+    description:
+      "Creates a product with MVP defaults (GLOBAL, VERIFIED, INTERNAL) and stores nutrition per 100g.",
+  })
   @Post()
   async createManual(@Body() dto: CreateProductDto) {
     return this.productsService.createManual(dto);
   }
 
   // Search products by name/brand.
-  @ApiOperation({ summary: "Search products" })
+  @ApiOperation({
+    summary: "Search products",
+    description:
+      "Search by name or brand with a simple case-insensitive contains filter.",
+  })
   @ApiQuery({ name: "query", required: false, example: "yogurt" })
   @Get()
   async search(@Query() dto: SearchProductsDto) {
