@@ -140,6 +140,8 @@ export class McpController {
             const product = await this.mcpService.createManual(
               args as Record<string, unknown>,
             );
+            // MCP CallToolResult content doesn't support type="json"; send JSON as text.
+            const productJson = JSON.stringify(product);
             return {
               jsonrpc: "2.0",
               id,
@@ -149,7 +151,7 @@ export class McpController {
                     type: "text",
                     text: `✅ Product created: ${product.name}`,
                   },
-                  { type: "json", json: product },
+                  { type: "text", text: productJson },
                 ],
                 isError: false,
               },
@@ -160,12 +162,14 @@ export class McpController {
             args as Record<string, unknown>,
           );
           const payload = formatSearchResult(results);
+          // MCP CallToolResult content doesn't support type="json"; send JSON as text.
+          const resultsJson = JSON.stringify(payload);
           return {
             jsonrpc: "2.0",
             id,
             result: {
               content: [
-                { type: "json", json: payload },
+                { type: "text", text: resultsJson },
               ],
               isError: false,
             },
