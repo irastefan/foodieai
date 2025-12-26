@@ -58,28 +58,8 @@ Example response:
   "result": {
     "content": [
       {
-        "type": "json",
-        "json": {
-          "count": 1,
-          "items": [
-            {
-              "id": "prod_1",
-              "name": "Salmon",
-              "brand": null,
-              "price": null,
-              "currency": null,
-              "store": null,
-              "url": null,
-              "image_url": null,
-              "nutrition": {
-                "kcal100": 208,
-                "protein100": 20,
-                "fat100": 13,
-                "carbs100": 0
-              }
-            }
-          ]
-        }
+        "type": "text",
+        "text": "{\"count\":1,\"items\":[{\"id\":\"prod_1\",\"name\":\"Salmon\",\"brand\":null,\"price\":null,\"currency\":null,\"store\":null,\"url\":null,\"image_url\":null,\"nutrition\":{\"kcal100\":208,\"protein100\":20,\"fat100\":13,\"carbs100\":0}}]}"
       }
     ],
     "isError": false
