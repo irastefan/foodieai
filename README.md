@@ -1,0 +1,90 @@
+# FoodieAI Backend (MVP)
+
+NestJS + Prisma + Postgres (Neon) backend with REST + MCP (JSON-RPC) + OAuth.
+
+## Requirements
+- Node.js 20+
+- Postgres connection string in `DATABASE_URL`
+
+## Setup (local)
+```bash
+npm install
+npm run prisma:generate
+npm run prisma:migrate:dev
+npm run start:dev
+```
+
+## Build
+```bash
+npm run build
+```
+
+## Swagger
+```text
+http://localhost:3000/docs
+```
+
+## Environment
+Create `.env` from `.env.example`.
+
+## REST Endpoints
+- `GET /health` -> `{ "status": "ok" }`
+- `POST /v1/products`
+- `GET /v1/products?query=...`
+
+## MCP (JSON-RPC v2)
+- `GET /mcp` -> `{ "name": "FoodieAI MCP", "status": "ok" }`
+- `POST /mcp`
+
+### tools/list (public)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+### tools/call product.search (public)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"product.search","arguments":{"query":"yogurt"}}}'
+```
+
+### tools/call product.createManual (requires Bearer)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"product.createManual","arguments":{"name":"Salmon","kcal100":208,"protein100":20,"fat100":13,"carbs100":0}}}'
+```
+
+## OAuth (for ChatGPT connector)
+Discovery endpoints:
+- `/.well-known/oauth-authorization-server`
+- `/.well-known/oauth-authorization-server/mcp`
+- `/.well-known/openid-configuration`
+- `/.well-known/openid-configuration/mcp`
+
+### Authorize
+```bash
+curl -i "http://localhost:3000/oauth/authorize?response_type=code&client_id=foodieai_mcp&redirect_uri=https://chatgpt.com/&state=abc&scope=tools"
+```
+
+### Token
+```bash
+curl -s -X POST http://localhost:3000/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code&code=PASTE_CODE&redirect_uri=https://chatgpt.com/&client_id=foodieai_mcp&client_secret=changeme"
+```
+
+## Migrations
+- Local: `npx prisma migrate dev`
+- Prod: `npx prisma migrate deploy`
+
+## Deploy (Cloud Run)
+```bash
+gcloud run deploy foodieai-backend \
+  --source . \
+  --region me-west1 \
+  --set-env-vars DATABASE_URL=...,OAUTH_CLIENT_ID=...,OAUTH_CLIENT_SECRET=...,OAUTH_REDIRECT_URI=https://chatgpt.com/,OAUTH_ISSUER=https://your-service-domain
+```
