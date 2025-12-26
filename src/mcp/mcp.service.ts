@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Product } from "@prisma/client";
 import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { CreateProductDto } from "../products/dto/create-product.dto";
@@ -17,6 +18,11 @@ export class McpValidationError extends Error {
 export class McpService {
   // MCP tool definitions and thin wrappers around product operations.
   constructor(private readonly productsService: ProductsService) {}
+
+  private readonly recentCreates = new Map<
+    string,
+    { expiresAt: number; product: Product }
+  >();
 
   // Tool catalog exposed via tools/list.
   listTools() {
@@ -94,7 +100,18 @@ export class McpService {
   // MCP tool: product.createManual
   async createManual(args: Record<string, unknown>) {
     const dto = await this.validateDto(CreateProductDto, args);
-    return this.productsService.createManual(dto);
+    const signature = this.createSignature(dto);
+    const cached = this.recentCreates.get(signature);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.product;
+    }
+
+    const product = await this.productsService.createManual(dto);
+    this.recentCreates.set(signature, {
+      expiresAt: Date.now() + 30_000,
+      product,
+    });
+    return product;
   }
 
   // MCP tool: product.search
@@ -119,5 +136,16 @@ export class McpService {
       throw new McpValidationError(errors);
     }
     return dto;
+  }
+
+  private createSignature(dto: CreateProductDto) {
+    return JSON.stringify({
+      name: dto.name,
+      brand: dto.brand ?? null,
+      kcal100: dto.kcal100,
+      protein100: dto.protein100,
+      fat100: dto.fat100,
+      carbs100: dto.carbs100,
+    });
   }
 }
