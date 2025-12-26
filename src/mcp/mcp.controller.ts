@@ -89,6 +89,7 @@ export class McpController {
       method: string;
       params?: unknown;
     };
+    
 
     switch (request.method) {
       case "initialize":
