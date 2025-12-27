@@ -26,6 +26,11 @@ http://localhost:3000/docs
 
 ## Environment
 Create `.env` from `.env.example`.
+Key auth vars (dev):
+- `AUTH_MODE=dev`
+- `DEV_SUB=dev-user`
+- `OAUTH_TOKEN_SECRET=...`
+- `OAUTH_AUDIENCE=foodieai-mcp`
 
 ## REST Endpoints
 - `GET /health` -> `{ "status": "ok" }`
@@ -115,6 +120,8 @@ curl -s -X POST http://localhost:3000/mcp \
 ```
 
 ## OAuth (for ChatGPT connector)
+DEV auth mode uses JWT access tokens with a fixed subject.
+
 Discovery endpoints:
 - `/.well-known/oauth-authorization-server`
 - `/.well-known/oauth-authorization-server/mcp`
@@ -131,6 +138,14 @@ curl -i "http://localhost:3000/oauth/authorize?response_type=code&client_id=food
 curl -s -X POST http://localhost:3000/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code&code=PASTE_CODE&redirect_uri=https://chatgpt.com/&client_id=foodieai_mcp&client_secret=changeme"
+```
+
+### MCP with Bearer token
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
 ## Migrations

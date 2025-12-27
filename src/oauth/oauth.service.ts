@@ -23,11 +23,22 @@ export class OauthService {
   private readonly tokens = new Map<string, AccessTokenRecord>();
 
   // Create a short-lived authorization code.
-  createAuthCode(clientId: string, redirectUri: string, scope?: string) {
+  createAuthCode(
+    clientId: string,
+    redirectUri: string,
+    scope?: string,
+    subject?: string,
+  ) {
     const code = randomUUID();
-    const subject = randomUUID();
+    const resolvedSubject = subject ?? randomUUID();
     const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.codes.set(code, { clientId, redirectUri, scope, expiresAt, subject });
+    this.codes.set(code, {
+      clientId,
+      redirectUri,
+      scope,
+      expiresAt,
+      subject: resolvedSubject,
+    });
     return code;
   }
 

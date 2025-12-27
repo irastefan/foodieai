@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Post, Query, Res } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Response } from "express";
+import jwt from "jsonwebtoken";
 import { OauthService } from "./oauth.service";
 
 @ApiTags("oauth")
@@ -20,6 +21,8 @@ export class OauthController {
     @Query() query: Record<string, string | undefined>,
     @Res() res: Response,
   ) {
+    const authMode = process.env.AUTH_MODE || "dev";
+    // TODO: Replace DEV auth with real login (email OTP) in production.
     const clientId = query.client_id;
     const redirectUri = query.redirect_uri;
     const responseType = query.response_type;
@@ -33,7 +36,16 @@ export class OauthController {
       });
     }
 
-    const code = this.oauthService.createAuthCode(clientId, redirectUri, scope);
+    const subject =
+      authMode === "dev"
+        ? process.env.DEV_SUB || "dev-user"
+        : undefined;
+    const code = this.oauthService.createAuthCode(
+      clientId,
+      redirectUri,
+      scope,
+      subject,
+    );
     const redirectUrl = new URL(redirectUri);
     redirectUrl.searchParams.set("code", code);
     if (state) {
@@ -50,11 +62,25 @@ export class OauthController {
     description:
       "Exchanges an authorization code for a short-lived access token (Bearer).",
   })
+  @ApiBody({
+    schema: { type: "object" },
+    examples: {
+      tokenExchange: {
+        summary: "Exchange auth code",
+        value: {
+          grant_type: "authorization_code",
+          code: "PASTE_CODE",
+          client_id: "foodieai",
+        },
+      },
+    },
+  })
   token(
     @Body() body: Record<string, string | undefined>,
     @Headers("authorization") authorization: string | undefined,
     @Res() res: Response,
   ) {
+    const authMode = process.env.AUTH_MODE || "dev";
     const grantType = body.grant_type;
     const code = body.code;
     const redirectUri = body.redirect_uri;
@@ -83,17 +109,39 @@ export class OauthController {
       });
     }
 
-    const issued = this.oauthService.issueAccessToken(
-      record.clientId,
-      record.scope,
-      record.subject,
+    const secret = process.env.OAUTH_TOKEN_SECRET;
+    if (!secret) {
+      return res.status(500).json({
+        error: "server_error",
+        error_description: "Missing OAUTH_TOKEN_SECRET",
+      });
+    }
+
+    const audience = process.env.OAUTH_AUDIENCE || "foodieai-mcp";
+    const scopeValue = "mcp";
+    const sub =
+      authMode === "dev"
+        ? process.env.DEV_SUB || record.subject
+        : record.subject;
+
+    const accessToken = jwt.sign(
+      {
+        sub,
+        aud: audience,
+        scope: scopeValue,
+      },
+      secret,
+      {
+        algorithm: "HS256",
+        expiresIn: 3600,
+      },
     );
 
     return res.json({
-      access_token: issued.token,
+      access_token: accessToken,
       token_type: "Bearer",
       expires_in: 3600,
-      scope: record.scope ?? "",
+      scope: scopeValue,
     });
   }
 

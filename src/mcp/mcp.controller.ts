@@ -4,10 +4,11 @@ import {
   Get,
   Headers,
   Post,
+  Req,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Logger } from "@nestjs/common";
+import { Request } from "express";
 import { AuthContextService } from "../auth/auth-context.service";
 import { jsonToTextContent } from "./mcp.content";
 import { formatSearchResult, formatUserMe } from "./mcp.mapper";
@@ -95,6 +96,38 @@ export class McpController {
           params: {},
         },
       },
+      toolsCallSearch: {
+        summary: "Search products (public)",
+        value: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "product.search",
+            arguments: {
+              query: "yogurt",
+            },
+          },
+        },
+      },
+      toolsCallCreate: {
+        summary: "Create product",
+        value: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "product.createManual",
+            arguments: {
+              name: "Salmon",
+              kcal100: 208,
+              protein100: 20,
+              fat100: 13,
+              carbs100: 0,
+            },
+          },
+        },
+      },
       toolsCallUserMe: {
         summary: "Get current user",
         value: {
@@ -141,54 +174,21 @@ export class McpController {
           },
         },
       },
-      toolsCallSearch: {
-        summary: "Search products (public)",
-        value: {
-          jsonrpc: "2.0",
-          id: 2,
-          method: "tools/call",
-          params: {
-            name: "product.search",
-            arguments: {
-              query: "yogurt",
-            },
-          },
-        },
-      },
-      toolsCallCreate: {
-        summary: "Create product",
-        value: {
-          jsonrpc: "2.0",
-          id: 3,
-          method: "tools/call",
-          params: {
-            name: "product.createManual",
-            arguments: {
-              name: "Salmon",
-              kcal100: 208,
-              protein100: 20,
-              fat100: 13,
-              carbs100: 0,
-            },
-          },
-        },
-      },
     },
   })
   async handleMcp(
     @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: Request & { user?: { userId: string; externalId: string } },
     @Body() body: unknown,
   ) {
-    this.logRequest(body, headers);
-    const response = await this.handleJsonRpc(body, headers);
-    this.logResponse(response);
-    return response;
+    return this.handleJsonRpc(body, headers, req.user);
   }
 
   // Core JSON-RPC router for MCP methods.
   private async handleJsonRpc(
     body: unknown,
     headers: Record<string, string | string[] | undefined>,
+    user?: { userId: string; externalId: string },
   ) {
     const id = this.extractId(body);
     if (!this.isValidRequest(body)) {
@@ -291,7 +291,8 @@ export class McpController {
             };
           }
 
-          const userId = await this.authContext.getOrCreateUserId(headers);
+          const userId =
+            user?.userId ?? (await this.authContext.getOrCreateUserId(headers));
 
           if (name === "user.me") {
             const data = await this.mcpService.userMe(userId);
@@ -431,32 +432,5 @@ export class McpController {
       return "✅ Profile saved.";
     }
     return `✅ Targets: ${profile.targetCalories} kcal, P ${profile.targetProteinG}g, F ${profile.targetFatG}g, C ${profile.targetCarbsG}g`;
-  }
-
-  private logRequest(
-    body: unknown,
-    headers: Record<string, string | string[] | undefined>,
-  ) {
-    const authHeader = headers["authorization"];
-    const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-    const hasAuth = Boolean(authValue);
-    const payload = {
-      hasAuth,
-      method: this.isObject(body) ? body.method : undefined,
-      id: this.isObject(body) ? body.id : undefined,
-    };
-    Logger.log(`MCP request ${JSON.stringify(payload)}`, McpController.name);
-  }
-
-  private logResponse(response: unknown) {
-    if (!this.isObject(response)) {
-      Logger.log("MCP response <non-object>", McpController.name);
-      return;
-    }
-    const payload = {
-      id: response.id,
-      hasError: Boolean(response.error),
-    };
-    Logger.log(`MCP response ${JSON.stringify(payload)}`, McpController.name);
   }
 }
