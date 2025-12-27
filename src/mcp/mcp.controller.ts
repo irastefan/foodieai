@@ -292,7 +292,7 @@ export class McpController {
           }
 
           const userId =
-            user?.userId ?? (await this.authContext.getOrCreateUserId(headers));
+            user?.userId ?? (await this.resolveUserId(headers));
 
           if (name === "user.me") {
             const data = await this.mcpService.userMe(userId);
@@ -432,5 +432,17 @@ export class McpController {
       return "✅ Profile saved.";
     }
     return `✅ Targets: ${profile.targetCalories} kcal, P ${profile.targetProteinG}g, F ${profile.targetFatG}g, C ${profile.targetCarbsG}g`;
+  }
+
+  private async resolveUserId(
+    headers: Record<string, string | string[] | undefined>,
+  ) {
+    const authHeader = headers["authorization"];
+    const value = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    if (value && value.startsWith("Bearer ")) {
+      return this.authContext.getOrCreateUserId(headers);
+    }
+    const devSub = process.env.DEV_AUTH_BYPASS_SUB || "dev-user";
+    return this.authContext.getOrCreateByExternalId(devSub);
   }
 }

@@ -18,6 +18,11 @@ export class AuthContextService {
     return user.id;
   }
 
+  async getOrCreateByExternalId(externalId: string) {
+    const user = await this.usersService.getOrCreateByExternalId(externalId);
+    return user.id;
+  }
+
   private extractBearerToken(headers: Record<string, string | string[] | undefined>) {
     const raw = headers["authorization"];
     const value = Array.isArray(raw) ? raw[0] : raw;
