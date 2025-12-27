@@ -1,13 +1,18 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Headers, Post, UnauthorizedException } from "@nestjs/common";
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { AuthContextService } from "../auth/auth-context.service";
 import { formatSearchResult } from "./mcp.mapper";
 import { McpService, McpValidationError } from "./mcp.service";
+import { MissingFieldsError } from "../users/users.service";
 
 @ApiTags("mcp")
 @Controller("mcp")
 export class McpController {
   // MCP JSON-RPC entrypoint and status ping for ChatGPT connector.
-  constructor(private readonly mcpService: McpService) {}
+  constructor(
+    private readonly mcpService: McpService,
+    private readonly authContext: AuthContextService,
+  ) {}
 
   // Public health/status check for the MCP server.
   @Get()
@@ -26,8 +31,51 @@ export class McpController {
     description:
       "Handles MCP methods: initialize, tools/list, tools/call, resources/list, prompts/list.",
   })
+  @ApiResponse({
+    status: 200,
+    description: "tools/list response example",
+    schema: {
+      type: "object",
+      example: {
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          tools: [
+            {
+              name: "product.createManual",
+              description: "Create a product manually in FoodieAI",
+            },
+            {
+              name: "product.search",
+              description: "Search products by name or brand",
+            },
+            {
+              name: "user.me",
+              description: "Get current user and profile",
+            },
+            {
+              name: "userProfile.upsert",
+              description: "Create or update user profile and calculate targets",
+            },
+            {
+              name: "userTargets.recalculate",
+              description: "Recalculate daily calorie and macro targets",
+            },
+          ],
+        },
+      },
+    },
+  })
   @ApiBody({
-    schema: { type: "object" },
+    schema: {
+      type: "object",
+      example: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        params: {},
+      },
+    },
     examples: {
       toolsList: {
         summary: "List tools",
@@ -72,12 +120,18 @@ export class McpController {
       },
     },
   })
-  async handleMcp(@Body() body: unknown) {
-    return this.handleJsonRpc(body);
+  async handleMcp(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body() body: unknown,
+  ) {
+    return this.handleJsonRpc(body, headers);
   }
-  
+
   // Core JSON-RPC router for MCP methods.
-  private async handleJsonRpc(body: unknown) {
+  private async handleJsonRpc(
+    body: unknown,
+    headers?: Record<string, string | string[] | undefined>,
+  ) {
     const id = this.extractId(body);
     if (!this.isValidRequest(body)) {
       return this.error(id, -32600, "Invalid Request");
@@ -132,7 +186,13 @@ export class McpController {
           return this.error(id, -32600, "Invalid Request");
         }
 
-        if (name !== "product.createManual" && name !== "product.search") {
+        if (
+          name !== "product.createManual" &&
+          name !== "product.search" &&
+          name !== "user.me" &&
+          name !== "userProfile.upsert" &&
+          name !== "userTargets.recalculate"
+        ) {
           return this.error(id, -32601, "Method not found");
         }
 
@@ -159,27 +219,88 @@ export class McpController {
             };
           }
 
-          const results = await this.mcpService.search(
-            args as Record<string, unknown>,
-          );
-          const payload = formatSearchResult(results);
-          // MCP CallToolResult content doesn't support type="json"; send JSON as text.
-          const resultsJson = JSON.stringify(payload);
-          return {
-            jsonrpc: "2.0",
-            id,
-            result: {
-              content: [
-                { type: "text", text: resultsJson },
-              ],
-              isError: false,
-            },
-          };
+          if (name === "product.search") {
+            const results = await this.mcpService.search(
+              args as Record<string, unknown>,
+            );
+            const payload = formatSearchResult(results);
+            // MCP CallToolResult content doesn't support type="json"; send JSON as text.
+            const resultsJson = JSON.stringify(payload);
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                content: [{ type: "text", text: resultsJson }],
+                isError: false,
+              },
+            };
+          }
+
+          const authHeaders = headers ?? {};
+          const userId = await this.authContext.getOrCreateUserId(authHeaders);
+
+          if (name === "user.me") {
+            const data = await this.mcpService.userMe(userId);
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                content: [
+                  { type: "text", text: "✅ User profile loaded" },
+                  { type: "json", json: data },
+                ],
+                isError: false,
+              },
+            };
+          }
+
+          if (name === "userProfile.upsert") {
+            const profile = await this.mcpService.upsertUserProfile(
+              userId,
+              args as Record<string, unknown>,
+            );
+            const summary = this.buildTargetsSummary(profile);
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                content: [
+                  { type: "text", text: summary },
+                  { type: "json", json: { profile } },
+                ],
+                isError: false,
+              },
+            };
+          }
+
+          if (name === "userTargets.recalculate") {
+            const profile = await this.mcpService.recalculateTargets(userId);
+            const summary = this.buildTargetsSummary(profile);
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                content: [
+                  { type: "text", text: summary },
+                  { type: "json", json: { profile } },
+                ],
+                isError: false,
+              },
+            };
+          }
         } catch (error) {
           if (error instanceof McpValidationError) {
             return this.error(id, -32600, "Invalid Request", {
               errors: error.errors,
             });
+          }
+          if (error instanceof MissingFieldsError) {
+            return this.error(id, -32000, "Missing fields", {
+              missingFields: error.missingFields,
+            });
+          }
+          if (error instanceof UnauthorizedException) {
+            throw error;
           }
           return this.error(id, -32000, "Server error");
         }
@@ -236,5 +357,23 @@ export class McpController {
         ...(data ? { data } : {}),
       },
     };
+  }
+
+  private buildTargetsSummary(profile: {
+    targetCalories: number | null;
+    targetProteinG: number | null;
+    targetFatG: number | null;
+    targetCarbsG: number | null;
+  } | null) {
+    if (
+      !profile ||
+      profile.targetCalories == null ||
+      profile.targetProteinG == null ||
+      profile.targetFatG == null ||
+      profile.targetCarbsG == null
+    ) {
+      return "✅ Profile saved.";
+    }
+    return `✅ Targets: ${profile.targetCalories} kcal, P ${profile.targetProteinG}g, F ${profile.targetFatG}g, C ${profile.targetCarbsG}g`;
   }
 }

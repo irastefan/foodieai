@@ -4,6 +4,8 @@ import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { CreateProductDto } from "../products/dto/create-product.dto";
 import { ProductsService } from "../products/products.service";
+import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
+import { UsersService } from "../users/users.service";
 
 export class McpValidationError extends Error {
   readonly errors: ValidationError[];
@@ -17,7 +19,10 @@ export class McpValidationError extends Error {
 @Injectable()
 export class McpService {
   // MCP tool definitions and thin wrappers around product operations.
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   private readonly recentCreates = new Map<
     string,
@@ -94,6 +99,77 @@ export class McpService {
           required: ["count", "items"],
         },
       },
+      {
+        name: "user.me",
+        description: "Get current user and profile",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+          required: [],
+        },
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            user: { type: "object" },
+            profile: { type: ["object", "null"] },
+          },
+          required: ["user", "profile"],
+        },
+      },
+      {
+        name: "userProfile.upsert",
+        description: "Create or update user profile and calculate targets",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            firstName: { type: ["string", "null"] },
+            lastName: { type: ["string", "null"] },
+            sex: { type: ["string", "null"], enum: ["FEMALE", "MALE", null] },
+            birthDate: { type: ["string", "null"] },
+            heightCm: { type: ["number", "null"] },
+            weightKg: { type: ["number", "null"] },
+            activityLevel: {
+              type: ["string", "null"],
+              enum: ["SEDENTARY", "LIGHT", "MODERATE", "VERY_ACTIVE", null],
+            },
+            goal: { type: ["string", "null"], enum: ["MAINTAIN", "LOSE", "GAIN", null] },
+            calorieDelta: { type: ["number", "null"] },
+          },
+          required: [],
+        },
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            profile: { type: "object" },
+          },
+          required: ["profile"],
+        },
+      },
+      {
+        name: "userTargets.recalculate",
+        description: "Recalculate daily calorie and macro targets",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+          required: [],
+        },
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            profile: { type: "object" },
+          },
+          required: ["profile"],
+        },
+      },
     ];
   }
 
@@ -118,6 +194,22 @@ export class McpService {
   async search(args: Record<string, unknown>) {
     const query = typeof args.query === "string" ? args.query : undefined;
     return this.productsService.search(query);
+  }
+
+  // MCP tool: user.me
+  async userMe(userId: string) {
+    return this.usersService.getUserWithProfile(userId);
+  }
+
+  // MCP tool: userProfile.upsert
+  async upsertUserProfile(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(UpsertUserProfileDto, args);
+    return this.usersService.upsertProfile(userId, dto);
+  }
+
+  // MCP tool: userTargets.recalculate
+  async recalculateTargets(userId: string) {
+    return this.usersService.recalculateTargets(userId);
   }
 
   // Shared DTO validation for MCP tool args.

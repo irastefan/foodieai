@@ -67,6 +67,30 @@ Example response:
 }
 ```
 
+### tools/call user.me (requires Bearer)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"user.me","arguments":{}}}'
+```
+
+### tools/call userProfile.upsert (requires Bearer)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"userProfile.upsert","arguments":{"firstName":"Ira","lastName":"Stefan","sex":"FEMALE","birthDate":"1994-05-10","heightCm":168,"weightKg":63,"activityLevel":"MODERATE","goal":"LOSE","calorieDelta":-400}}}'
+```
+
+### tools/call userTargets.recalculate (requires Bearer)
+```bash
+curl -s -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"userTargets.recalculate","arguments":{}}}'
+```
+
 ### tools/call product.createManual (requires Bearer)
 ```bash
 curl -s -X POST http://localhost:3000/mcp \

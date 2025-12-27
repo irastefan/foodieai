@@ -6,12 +6,14 @@ type AuthCodeRecord = {
   redirectUri: string;
   scope?: string;
   expiresAt: number;
+  subject: string;
 };
 
 type AccessTokenRecord = {
   clientId: string;
   scope?: string;
   expiresAt: number;
+  subject: string;
 };
 
 @Injectable()
@@ -23,8 +25,9 @@ export class OauthService {
   // Create a short-lived authorization code.
   createAuthCode(clientId: string, redirectUri: string, scope?: string) {
     const code = randomUUID();
+    const subject = randomUUID();
     const expiresAt = Date.now() + 10 * 60 * 1000;
-    this.codes.set(code, { clientId, redirectUri, scope, expiresAt });
+    this.codes.set(code, { clientId, redirectUri, scope, expiresAt, subject });
     return code;
   }
 
@@ -46,10 +49,15 @@ export class OauthService {
   }
 
   // Issue a short-lived access token.
-  issueAccessToken(clientId: string, scope?: string) {
+  issueAccessToken(clientId: string, scope?: string, subject?: string) {
     const token = randomUUID();
     const expiresAt = Date.now() + 60 * 60 * 1000;
-    this.tokens.set(token, { clientId, scope, expiresAt });
+    this.tokens.set(token, {
+      clientId,
+      scope,
+      expiresAt,
+      subject: subject ?? randomUUID(),
+    });
     return { token, expiresAt };
   }
 
@@ -64,5 +72,10 @@ export class OauthService {
       return null;
     }
     return record;
+  }
+
+  getSubjectFromToken(token: string) {
+    const record = this.validateAccessToken(token);
+    return record?.subject ?? null;
   }
 }

@@ -86,6 +86,7 @@ export class OauthController {
     const issued = this.oauthService.issueAccessToken(
       record.clientId,
       record.scope,
+      record.subject,
     );
 
     return res.json({

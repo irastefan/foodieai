@@ -24,6 +24,56 @@ enum ProductSource {
   AI_ESTIMATED
 }
 
+enum Sex {
+  FEMALE
+  MALE
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  VERY_ACTIVE
+}
+
+enum GoalType {
+  MAINTAIN
+  LOSE
+  GAIN
+}
+
+model User {
+  id         String       @id @default(cuid())
+  externalId String       @unique
+  createdAt  DateTime     @default(now())
+  profile    UserProfile?
+}
+
+model UserProfile {
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName     String?
+  lastName      String?
+
+  sex           Sex?
+  birthDate     DateTime?
+  heightCm      Int?
+  weightKg      Float?
+  activityLevel ActivityLevel?
+  goal          GoalType?      @default(MAINTAIN)
+
+  targetCalories Int?
+  targetProteinG Int?
+  targetFatG     Int?
+  targetCarbsG   Int?
+
+  calorieDelta  Int?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
 model Product {
   id             String        @id @default(cuid())
   name           String
