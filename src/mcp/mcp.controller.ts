@@ -9,7 +9,7 @@ import {
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { jsonToTextContent } from "./mcp.content";
-import { formatSearchResult } from "./mcp.mapper";
+import { formatSearchResult, formatUserMe } from "./mcp.mapper";
 import { McpService, McpValidationError } from "./mcp.service";
 import { MissingFieldsError } from "../users/users.service";
 
@@ -291,13 +291,14 @@ export class McpController {
 
           if (name === "user.me") {
             const data = await this.mcpService.userMe(userId);
+            const payload = formatUserMe(data?.profile ?? null);
             return {
               jsonrpc: "2.0",
               id,
               result: {
                 content: [
                   { type: "text", text: "✅ User profile loaded" },
-                  jsonToTextContent(data),
+                  jsonToTextContent(payload),
                 ],
                 isError: false,
               },

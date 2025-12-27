@@ -113,10 +113,37 @@ export class McpService {
           type: "object",
           additionalProperties: false,
           properties: {
-            user: { type: "object" },
-            profile: { type: ["object", "null"] },
+            profile: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                firstName: { type: ["string", "null"] },
+                lastName: { type: ["string", "null"] },
+                sex: { type: ["string", "null"], enum: ["FEMALE", "MALE", null] },
+                birthDate: { type: ["string", "null"] },
+                heightCm: { type: ["number", "null"] },
+                weightKg: { type: ["number", "null"] },
+                activityLevel: {
+                  type: ["string", "null"],
+                  enum: ["SEDENTARY", "LIGHT", "MODERATE", "VERY_ACTIVE", null],
+                },
+                goal: { type: ["string", "null"], enum: ["MAINTAIN", "LOSE", "GAIN", null] },
+                calorieDelta: { type: ["number", "null"] },
+              },
+            },
+            targets: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                kcal: { type: ["number", "null"] },
+                protein: { type: ["number", "null"] },
+                fat: { type: ["number", "null"] },
+                carbs: { type: ["number", "null"] },
+              },
+              required: ["kcal", "protein", "fat", "carbs"],
+            },
           },
-          required: ["user", "profile"],
+          required: ["profile", "targets"],
         },
       },
       {

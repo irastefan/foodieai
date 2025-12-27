@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "test": "node -r ts-node/register test/mcp-search.test.ts && node -r ts-node/register test/mcp-calltoolresult.test.ts && node -r ts-node/register test/auth-context.test.ts"
+    "test": "node -r ts-node/register test/mcp-search.test.ts && node -r ts-node/register test/mcp-calltoolresult.test.ts && node -r ts-node/register test/auth-context.test.ts && node -r ts-node/register test/user-me-contract.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
