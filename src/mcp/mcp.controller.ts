@@ -94,6 +94,52 @@ export class McpController {
           params: {},
         },
       },
+      toolsCallUserMe: {
+        summary: "Get current user",
+        value: {
+          jsonrpc: "2.0",
+          id: 10,
+          method: "tools/call",
+          params: {
+            name: "user.me",
+            arguments: {},
+          },
+        },
+      },
+      toolsCallUserProfileUpsert: {
+        summary: "Upsert user profile",
+        value: {
+          jsonrpc: "2.0",
+          id: 11,
+          method: "tools/call",
+          params: {
+            name: "userProfile.upsert",
+            arguments: {
+              firstName: "Ira",
+              lastName: "Stefan",
+              sex: "FEMALE",
+              birthDate: "1994-05-10",
+              heightCm: 168,
+              weightKg: 63,
+              activityLevel: "MODERATE",
+              goal: "LOSE",
+              calorieDelta: -400,
+            },
+          },
+        },
+      },
+      toolsCallUserTargetsRecalculate: {
+        summary: "Recalculate targets",
+        value: {
+          jsonrpc: "2.0",
+          id: 12,
+          method: "tools/call",
+          params: {
+            name: "userTargets.recalculate",
+            arguments: {},
+          },
+        },
+      },
       toolsCallSearch: {
         summary: "Search products (public)",
         value: {

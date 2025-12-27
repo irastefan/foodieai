@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { OauthService } from "../oauth/oauth.service";
 import { UsersService } from "../users/users.service";
 
@@ -11,6 +11,7 @@ export class AuthContextService {
   ) {}
 
   async getOrCreateUserId(headers: Record<string, string | string[] | undefined>) {
+    this.logAuthPresence(headers);
     const token = this.extractBearerToken(headers);
     const subject = this.resolveSubject(token);
     const user = await this.usersService.getOrCreateByExternalId(subject);
@@ -20,6 +21,9 @@ export class AuthContextService {
   private extractBearerToken(headers: Record<string, string | string[] | undefined>) {
     const raw = headers["authorization"];
     const value = Array.isArray(raw) ? raw[0] : raw;
+    if (!value && process.env.DEV_AUTH_BYPASS_SUB) {
+      return "";
+    }
     if (!value || !value.startsWith("Bearer ")) {
       throw new UnauthorizedException("Missing Bearer token");
     }
@@ -31,6 +35,9 @@ export class AuthContextService {
   }
 
   private resolveSubject(token: string) {
+    if (!token && process.env.DEV_AUTH_BYPASS_SUB) {
+      return process.env.DEV_AUTH_BYPASS_SUB;
+    }
     const stored = this.oauthService.getSubjectFromToken(token);
     if (stored) {
       return stored;
@@ -41,6 +48,9 @@ export class AuthContextService {
       return jwtSubject;
     }
 
+    if (process.env.DEV_AUTH_BYPASS_SUB) {
+      return process.env.DEV_AUTH_BYPASS_SUB;
+    }
     throw new UnauthorizedException("Invalid access token");
   }
 
@@ -65,5 +75,12 @@ export class AuthContextService {
     const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
     const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
     return Buffer.from(normalized + pad, "base64").toString("utf8");
+  }
+
+  private logAuthPresence(headers: Record<string, string | string[] | undefined>) {
+    const raw = headers["authorization"];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const hasAuth = Boolean(value);
+    Logger.log(`MCP auth header present: ${hasAuth}`, AuthContextService.name);
   }
 }
