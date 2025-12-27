@@ -3,10 +3,12 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import * as express from "express";
 import { AppModule } from "./app.module";
+import { HttpLoggingInterceptor } from "./common/logging/http-logging.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(express.urlencoded({ extended: true }));
+  app.useGlobalInterceptors(new HttpLoggingInterceptor());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

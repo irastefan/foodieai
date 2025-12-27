@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Logger } from "@nestjs/common";
 import { AuthContextService } from "../auth/auth-context.service";
 import { jsonToTextContent } from "./mcp.content";
 import { formatSearchResult, formatUserMe } from "./mcp.mapper";
@@ -178,7 +179,10 @@ export class McpController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() body: unknown,
   ) {
-    return this.handleJsonRpc(body, headers);
+    this.logRequest(body, headers);
+    const response = await this.handleJsonRpc(body, headers);
+    this.logResponse(response);
+    return response;
   }
 
   // Core JSON-RPC router for MCP methods.
@@ -427,5 +431,32 @@ export class McpController {
       return "✅ Profile saved.";
     }
     return `✅ Targets: ${profile.targetCalories} kcal, P ${profile.targetProteinG}g, F ${profile.targetFatG}g, C ${profile.targetCarbsG}g`;
+  }
+
+  private logRequest(
+    body: unknown,
+    headers: Record<string, string | string[] | undefined>,
+  ) {
+    const authHeader = headers["authorization"];
+    const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    const hasAuth = Boolean(authValue);
+    const payload = {
+      hasAuth,
+      method: this.isObject(body) ? body.method : undefined,
+      id: this.isObject(body) ? body.id : undefined,
+    };
+    Logger.log(`MCP request ${JSON.stringify(payload)}`, McpController.name);
+  }
+
+  private logResponse(response: unknown) {
+    if (!this.isObject(response)) {
+      Logger.log("MCP response <non-object>", McpController.name);
+      return;
+    }
+    const payload = {
+      id: response.id,
+      hasError: Boolean(response.error),
+    };
+    Logger.log(`MCP response ${JSON.stringify(payload)}`, McpController.name);
   }
 }
