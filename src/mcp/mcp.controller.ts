@@ -1,6 +1,14 @@
-import { Body, Controller, Get, Headers, Post, UnauthorizedException } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
+import { jsonToTextContent } from "./mcp.content";
 import { formatSearchResult } from "./mcp.mapper";
 import { McpService, McpValidationError } from "./mcp.service";
 import { MissingFieldsError } from "../users/users.service";
@@ -130,7 +138,7 @@ export class McpController {
   // Core JSON-RPC router for MCP methods.
   private async handleJsonRpc(
     body: unknown,
-    headers?: Record<string, string | string[] | undefined>,
+    headers: Record<string, string | string[] | undefined>,
   ) {
     const id = this.extractId(body);
     if (!this.isValidRequest(body)) {
@@ -143,7 +151,6 @@ export class McpController {
       method: string;
       params?: unknown;
     };
-    
 
     switch (request.method) {
       case "initialize":
@@ -197,12 +204,27 @@ export class McpController {
         }
 
         try {
+          if (name === "product.search") {
+            const results = await this.mcpService.search(
+              args as Record<string, unknown>,
+            );
+            const payload = formatSearchResult(results);
+            // MCP CallToolResult content doesn't support type="json"; send JSON as text.
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: {
+                content: [jsonToTextContent(payload)],
+                isError: false,
+              },
+            };
+          }
+
           if (name === "product.createManual") {
             const product = await this.mcpService.createManual(
               args as Record<string, unknown>,
             );
             // MCP CallToolResult content doesn't support type="json"; send JSON as text.
-            const productJson = JSON.stringify(product);
             return {
               jsonrpc: "2.0",
               id,
@@ -212,32 +234,14 @@ export class McpController {
                     type: "text",
                     text: `✅ Product created: ${product.name}`,
                   },
-                  { type: "text", text: productJson },
+                  jsonToTextContent(product),
                 ],
                 isError: false,
               },
             };
           }
 
-          if (name === "product.search") {
-            const results = await this.mcpService.search(
-              args as Record<string, unknown>,
-            );
-            const payload = formatSearchResult(results);
-            // MCP CallToolResult content doesn't support type="json"; send JSON as text.
-            const resultsJson = JSON.stringify(payload);
-            return {
-              jsonrpc: "2.0",
-              id,
-              result: {
-                content: [{ type: "text", text: resultsJson }],
-                isError: false,
-              },
-            };
-          }
-
-          const authHeaders = headers ?? {};
-          const userId = await this.authContext.getOrCreateUserId(authHeaders);
+          const userId = await this.authContext.getOrCreateUserId(headers);
 
           if (name === "user.me") {
             const data = await this.mcpService.userMe(userId);
@@ -247,7 +251,7 @@ export class McpController {
               result: {
                 content: [
                   { type: "text", text: "✅ User profile loaded" },
-                  { type: "json", json: data },
+                  jsonToTextContent(data),
                 ],
                 isError: false,
               },
@@ -266,7 +270,7 @@ export class McpController {
               result: {
                 content: [
                   { type: "text", text: summary },
-                  { type: "json", json: { profile } },
+                  jsonToTextContent({ profile }),
                 ],
                 isError: false,
               },
@@ -282,7 +286,7 @@ export class McpController {
               result: {
                 content: [
                   { type: "text", text: summary },
-                  { type: "json", json: { profile } },
+                  jsonToTextContent({ profile }),
                 ],
                 isError: false,
               },
@@ -304,6 +308,7 @@ export class McpController {
           }
           return this.error(id, -32000, "Server error");
         }
+        return this.error(id, -32000, "Server error");
       }
       default:
         return this.error(id, -32601, "Method not found");

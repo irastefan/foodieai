@@ -75,6 +75,21 @@ curl -s -X POST http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"user.me","arguments":{}}}'
 ```
 
+Example response:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      { "type": "text", "text": "✅ User profile loaded" },
+      { "type": "text", "text": "{\"user\":{\"id\":\"u1\"},\"profile\":null}" }
+    ],
+    "isError": false
+  }
+}
+```
+
 ### tools/call userProfile.upsert (requires Bearer)
 ```bash
 curl -s -X POST http://localhost:3000/mcp \
