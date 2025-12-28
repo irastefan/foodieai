@@ -4,6 +4,15 @@ import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { CreateProductDto } from "../products/dto/create-product.dto";
 import { ProductsService } from "../products/products.service";
+import { AddRecipeDraftIngredientDto } from "../recipes/dto/add-recipe-draft-ingredient.dto";
+import { CreateRecipeDraftDto } from "../recipes/dto/create-recipe-draft.dto";
+import { DraftIdDto } from "../recipes/dto/draft-id.dto";
+import { RecipeIdDto } from "../recipes/dto/recipe-id.dto";
+import { RemoveRecipeDraftIngredientDto } from "../recipes/dto/remove-recipe-draft-ingredient.dto";
+import { SearchRecipesDto } from "../recipes/dto/search-recipes.dto";
+import { SetRecipeDraftStepsDto } from "../recipes/dto/set-recipe-draft-steps.dto";
+import { RecipeDraftsService } from "../recipes/recipe-drafts.service";
+import { RecipesService } from "../recipes/recipes.service";
 import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
 import { UsersService } from "../users/users.service";
 
@@ -21,6 +30,8 @@ export class McpService {
   // MCP tool definitions and thin wrappers around product operations.
   constructor(
     private readonly productsService: ProductsService,
+    private readonly recipeDraftsService: RecipeDraftsService,
+    private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -197,6 +208,155 @@ export class McpService {
           required: ["profile"],
         },
       },
+      {
+        name: "recipeDraft.create",
+        description: "Create a recipe draft",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            title: { type: "string" },
+            category: { type: ["string", "null"] },
+            description: { type: ["string", "null"] },
+            servings: { type: ["number", "null"] },
+          },
+          required: ["title"],
+        },
+      },
+      {
+        name: "recipeDraft.addIngredient",
+        description: "Add an ingredient to a recipe draft",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+            ingredient: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                originalText: { type: ["string", "null"] },
+                name: { type: "string" },
+                amount: { type: ["number", "null"] },
+                unit: { type: ["string", "null"] },
+                productId: { type: ["string", "null"] },
+                macrosPer100: {
+                  type: ["object", "null"],
+                  additionalProperties: false,
+                  properties: {
+                    kcal100: { type: "number" },
+                    protein100: { type: "number" },
+                    fat100: { type: "number" },
+                    carbs100: { type: "number" },
+                  },
+                  required: ["kcal100", "protein100", "fat100", "carbs100"],
+                },
+                assumptions: { type: ["object", "null"] },
+                order: { type: ["number", "null"] },
+              },
+              required: ["name"],
+            },
+          },
+          required: ["draftId", "ingredient"],
+        },
+      },
+      {
+        name: "recipeDraft.removeIngredient",
+        description: "Remove an ingredient from a recipe draft",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+            ingredientId: { type: "string" },
+          },
+          required: ["draftId", "ingredientId"],
+        },
+      },
+      {
+        name: "recipeDraft.setSteps",
+        description: "Replace steps for a recipe draft",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+            steps: { type: "array", items: { type: "string" } },
+          },
+          required: ["draftId", "steps"],
+        },
+      },
+      {
+        name: "recipeDraft.get",
+        description: "Get a recipe draft by id",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+          },
+          required: ["draftId"],
+        },
+      },
+      {
+        name: "recipeDraft.validate",
+        description: "Validate a recipe draft without throwing",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+          },
+          required: ["draftId"],
+        },
+      },
+      {
+        name: "recipeDraft.publish",
+        description: "Publish a recipe draft",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            draftId: { type: "string" },
+          },
+          required: ["draftId"],
+        },
+      },
+      {
+        name: "recipe.search",
+        description: "Search recipes",
+        public: true,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            query: { type: ["string", "null"] },
+            category: { type: ["string", "null"] },
+            limit: { type: ["number", "null"] },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "recipe.get",
+        description: "Get a recipe by id",
+        public: true,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            recipeId: { type: "string" },
+          },
+          required: ["recipeId"],
+        },
+      },
     ];
   }
 
@@ -237,6 +397,63 @@ export class McpService {
   // MCP tool: userTargets.recalculate
   async recalculateTargets(userId: string) {
     return this.usersService.recalculateTargets(userId);
+  }
+
+  async createRecipeDraft(args: Record<string, unknown>) {
+    const dto = await this.validateDto(CreateRecipeDraftDto, args);
+    const draft = await this.recipeDraftsService.createDraft(dto);
+    return { draftId: draft.id, draft };
+  }
+
+  async addRecipeDraftIngredient(args: Record<string, unknown>) {
+    const dto = await this.validateDto(AddRecipeDraftIngredientDto, args);
+    const draft = await this.recipeDraftsService.addIngredient(
+      dto.draftId,
+      dto.ingredient,
+    );
+    return { draft };
+  }
+
+  async removeRecipeDraftIngredient(args: Record<string, unknown>) {
+    const dto = await this.validateDto(RemoveRecipeDraftIngredientDto, args);
+    const ingredients = await this.recipeDraftsService.removeIngredient(
+      dto.draftId,
+      dto.ingredientId,
+    );
+    return { ingredients };
+  }
+
+  async setRecipeDraftSteps(args: Record<string, unknown>) {
+    const dto = await this.validateDto(SetRecipeDraftStepsDto, args);
+    const steps = await this.recipeDraftsService.setSteps(dto.draftId, dto.steps);
+    return { steps };
+  }
+
+  async getRecipeDraft(args: Record<string, unknown>) {
+    const dto = await this.validateDto(DraftIdDto, args);
+    const draft = await this.recipeDraftsService.getDraft(dto.draftId);
+    return { draft };
+  }
+
+  async validateRecipeDraft(args: Record<string, unknown>) {
+    const dto = await this.validateDto(DraftIdDto, args);
+    return this.recipeDraftsService.validateDraft(dto.draftId);
+  }
+
+  async publishRecipeDraft(args: Record<string, unknown>) {
+    const dto = await this.validateDto(DraftIdDto, args);
+    const recipe = await this.recipeDraftsService.publishDraft(dto.draftId);
+    return { recipeId: recipe.id, recipe };
+  }
+
+  async searchRecipes(args: Record<string, unknown>) {
+    const dto = await this.validateDto(SearchRecipesDto, args);
+    return this.recipesService.search(dto.query, dto.category, dto.limit);
+  }
+
+  async getRecipe(args: Record<string, unknown>) {
+    const dto = await this.validateDto(RecipeIdDto, args);
+    return this.recipesService.get(dto.recipeId);
   }
 
   // Shared DTO validation for MCP tool args.

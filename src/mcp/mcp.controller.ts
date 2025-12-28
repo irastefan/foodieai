@@ -14,6 +14,11 @@ import { jsonToTextContent } from "./mcp.content";
 import { formatSearchResult, formatUserMe } from "./mcp.mapper";
 import { McpService, McpValidationError } from "./mcp.service";
 import { MissingFieldsError } from "../users/users.service";
+import {
+  DraftIncompleteError,
+  RecipeDraftNotFoundError,
+  RecipeNotFoundError,
+} from "../recipes/recipes.errors";
 
 @ApiTags("mcp")
 @Controller("mcp")
@@ -248,7 +253,16 @@ export class McpController {
           name !== "product.search" &&
           name !== "user.me" &&
           name !== "userProfile.upsert" &&
-          name !== "userTargets.recalculate"
+          name !== "userTargets.recalculate" &&
+          name !== "recipeDraft.create" &&
+          name !== "recipeDraft.addIngredient" &&
+          name !== "recipeDraft.removeIngredient" &&
+          name !== "recipeDraft.setSteps" &&
+          name !== "recipeDraft.get" &&
+          name !== "recipeDraft.validate" &&
+          name !== "recipeDraft.publish" &&
+          name !== "recipe.search" &&
+          name !== "recipe.get"
         ) {
           return this.error(id, -32601, "Method not found");
         }
@@ -344,6 +358,69 @@ export class McpController {
               },
             };
           }
+
+          if (name === "recipeDraft.create") {
+            const payload = await this.mcpService.createRecipeDraft(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Draft created", payload);
+          }
+
+          if (name === "recipeDraft.addIngredient") {
+            const payload = await this.mcpService.addRecipeDraftIngredient(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Ingredient added", payload);
+          }
+
+          if (name === "recipeDraft.removeIngredient") {
+            const payload = await this.mcpService.removeRecipeDraftIngredient(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Ingredient removed", payload);
+          }
+
+          if (name === "recipeDraft.setSteps") {
+            const payload = await this.mcpService.setRecipeDraftSteps(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Steps updated", payload);
+          }
+
+          if (name === "recipeDraft.get") {
+            const payload = await this.mcpService.getRecipeDraft(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Draft loaded", payload);
+          }
+
+          if (name === "recipeDraft.validate") {
+            const payload = await this.mcpService.validateRecipeDraft(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Draft validated", payload);
+          }
+
+          if (name === "recipeDraft.publish") {
+            const payload = await this.mcpService.publishRecipeDraft(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Draft published", payload);
+          }
+
+          if (name === "recipe.search") {
+            const payload = await this.mcpService.searchRecipes(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Recipes found", payload);
+          }
+
+          if (name === "recipe.get") {
+            const payload = await this.mcpService.getRecipe(
+              args as Record<string, unknown>,
+            );
+            return this.jsonResult(id, "✅ Recipe loaded", payload);
+          }
         } catch (error) {
           if (error instanceof McpValidationError) {
             return this.error(id, -32600, "Invalid Request", {
@@ -353,6 +430,18 @@ export class McpController {
           if (error instanceof MissingFieldsError) {
             return this.error(id, -32000, "Missing fields", {
               missingFields: error.missingFields,
+            });
+          }
+          if (
+            error instanceof RecipeDraftNotFoundError ||
+            error instanceof RecipeNotFoundError
+          ) {
+            return this.error(id, -32000, "NOT_FOUND");
+          }
+          if (error instanceof DraftIncompleteError) {
+            return this.error(id, -32000, "DRAFT_INCOMPLETE", {
+              missingFields: error.missingFields,
+              missingIngredients: error.missingIngredients,
             });
           }
           if (error instanceof UnauthorizedException) {
@@ -412,6 +501,24 @@ export class McpController {
         code,
         message,
         ...(data ? { data } : {}),
+      },
+    };
+  }
+
+  private jsonResult(
+    id: number | string | null,
+    message: string,
+    payload: unknown,
+  ) {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        content: [
+          { type: "text", text: message },
+          { type: "json", json: payload },
+        ],
+        isError: false,
       },
     };
   }
