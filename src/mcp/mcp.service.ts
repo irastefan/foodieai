@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Product } from "@prisma/client";
+import { Prisma, Product } from "@prisma/client";
 import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { CreateProductDto } from "../products/dto/create-product.dto";
@@ -13,8 +13,10 @@ import { SearchRecipesDto } from "../recipes/dto/search-recipes.dto";
 import { SetRecipeDraftStepsDto } from "../recipes/dto/set-recipe-draft-steps.dto";
 import { RecipeDraftsService } from "../recipes/recipe-drafts.service";
 import { RecipesService } from "../recipes/recipes.service";
+import { DraftIncompleteError, RecipeDraftNotFoundError, RecipeNotFoundError } from "../recipes/recipes.errors";
 import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
 import { UsersService } from "../users/users.service";
+import { McpHandledError, throwMcpError } from "./mcp.utils";
 
 export class McpValidationError extends Error {
   readonly errors: ValidationError[];
@@ -25,15 +27,51 @@ export class McpValidationError extends Error {
   }
 }
 
+type JsonSchemaType = "string" | "number" | "object" | "array" | "boolean" | "null";
+
+type JsonSchema = {
+  type: JsonSchemaType | JsonSchemaType[];
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  additionalProperties?: boolean;
+  enum?: Array<string | number | boolean | null>;
+};
+
+type ToolExample = { summary: string; arguments: Record<string, unknown> };
+
+type ToolDefinition = {
+  name: string;
+  description: string;
+  tags: string[];
+  auth: "none" | "required";
+  public: boolean;
+  inputSchema: JsonSchema;
+  outputSchema?: JsonSchema;
+  examples?: ToolExample[];
+  dtoClass?: new () => object;
+  handler: (
+    args: Record<string, unknown>,
+    context: { userId?: string; headers: Record<string, unknown>; requestId: string },
+  ) => Promise<{ text: string; json?: unknown; meta?: Record<string, unknown> }>;
+};
+
 @Injectable()
 export class McpService {
-  // MCP tool definitions and thin wrappers around product operations.
   constructor(
     private readonly productsService: ProductsService,
     private readonly recipeDraftsService: RecipeDraftsService,
     private readonly recipesService: RecipesService,
     private readonly usersService: UsersService,
-  ) {}
+  ) {
+    this.toolRegistry = this.buildToolRegistry();
+  }
+
+  private readonly toolAliases: Record<string, string> = {
+    "recipe.createDraft": "recipeDraft.create",
+  };
+
+  private readonly toolRegistry: Record<string, ToolDefinition>;
 
   private readonly recentCreates = new Map<
     string,
@@ -41,11 +79,348 @@ export class McpService {
   >();
 
   // Tool catalog exposed via tools/list.
+
   listTools() {
-    return [
-      {
+    return Object.values(this.toolRegistry).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      tags: tool.tags,
+      auth: tool.auth,
+      public: tool.public,
+      inputSchema: tool.inputSchema,
+      outputSchema: tool.outputSchema,
+      examples: tool.examples,
+    }));
+  }
+
+  getToolDefinition(name: string) {
+    const resolved = this.resolveToolName(name);
+    return resolved ? this.toolRegistry[resolved] : undefined;
+  }
+
+  async executeTool(
+    name: string,
+    rawArgs: Record<string, unknown>,
+    context: { userId?: string; headers: Record<string, unknown>; requestId: string },
+  ) {
+    const resolvedName = this.resolveToolName(name);
+    const tool = resolvedName ? this.toolRegistry[resolvedName] : undefined;
+    if (!tool) {
+      throwMcpError(-32601, "NOT_FOUND");
+    }
+    this.ensureAuth(tool, context);
+    const validatedArgs = this.validateInput(tool, rawArgs);
+    const args = await this.validateDtoIfPresent(tool, validatedArgs);
+    const normalizedArgs = this.normalizeArgs(tool.name, args);
+    return tool.handler(normalizedArgs, context);
+  }
+
+  private resolveToolName(name: string) {
+    const canonical = this.toolAliases[name] ?? name;
+    return this.toolRegistry[canonical] ? canonical : undefined;
+  }
+
+  private ensureAuth(
+    tool: ToolDefinition,
+    context: { userId?: string; headers: Record<string, unknown> },
+  ) {
+    if (tool.auth === "required" && !context.userId) {
+      throwMcpError(401, "AUTH_REQUIRED");
+    }
+  }
+
+  private validateInput(tool: ToolDefinition, args: Record<string, unknown>) {
+    const errors: { path: string; expected: string; got: string }[] = [];
+    if (!this.isPlainObject(args)) {
+      throwMcpError(-32000, "VALIDATION_ERROR", {
+        fields: [{ path: "", expected: "object", got: this.describeType(args) }],
+        hint: "arguments must be an object",
+      });
+    }
+
+    const value = this.coerceValue(tool.inputSchema, args, "", errors);
+    if (errors.length > 0) {
+      throwMcpError(-32000, "VALIDATION_ERROR", {
+        fields: errors,
+        hint: "Fix invalid fields and try again.",
+      });
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private coerceValue(
+    schema: JsonSchema,
+    value: unknown,
+    path: string,
+    errors: Array<{ path: string; expected: string; got: string }>,
+  ): unknown {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+
+    const isNullAllowed = types.includes("null");
+    if (value === null) {
+      if (isNullAllowed) {
+        return null;
+      }
+      errors.push({ path, expected: types.join("|"), got: "null" });
+      return null;
+    }
+
+    if (types.includes("number") && typeof value === "string" && value.trim().length > 0) {
+      const num = Number(value);
+      if (!Number.isNaN(num)) {
+        value = num;
+      }
+    }
+
+    if (types.includes("string") && typeof value === "number") {
+      value = String(value);
+    }
+
+    if (types.includes("number") && typeof value === "number") {
+      if (Number.isFinite(value)) {
+        return value;
+      }
+      errors.push({ path, expected: "number", got: "non-finite number" });
+      return value;
+    }
+
+    if (types.includes("string") && typeof value === "string") {
+      const normalized = value.trim();
+      if (schema.enum && !schema.enum.includes(normalized)) {
+        errors.push({ path, expected: schema.enum.join("|"), got: normalized });
+      }
+      return normalized;
+    }
+
+    if (types.includes("boolean") && typeof value === "boolean") {
+      return value;
+    }
+
+    if (types.includes("array") && Array.isArray(value) && schema.items) {
+      return value.map((item, idx) =>
+        this.coerceValue(schema.items as JsonSchema, item, `${path}[${idx}]`, errors),
+      );
+    }
+
+    if (types.includes("object") && this.isPlainObject(value)) {
+      const obj = value as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      const required = schema.required ?? [];
+      if (schema.properties) {
+        for (const key of Object.keys(schema.properties)) {
+          const childSchema = schema.properties[key]!;
+          if (obj[key] === undefined) {
+            if (required.includes(key)) {
+              errors.push({
+                path: path ? `${path}.${key}` : key,
+                expected: this.describeSchema(childSchema),
+                got: "missing",
+              });
+            }
+            continue;
+          }
+          result[key] = this.coerceValue(
+            childSchema,
+            obj[key],
+            path ? `${path}.${key}` : key,
+            errors,
+          );
+        }
+      }
+      const additionalProperties = schema.additionalProperties ?? true;
+      if (additionalProperties === false) {
+        return result;
+      }
+      for (const key of Object.keys(obj)) {
+        if (!schema.properties || !(key in schema.properties)) {
+          result[key] = obj[key];
+        }
+      }
+      return result;
+    }
+
+    errors.push({ path, expected: types.join("|"), got: this.describeType(value) });
+    return value;
+  }
+
+  private describeSchema(schema: JsonSchema) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    return types.join("|");
+  }
+
+  private describeType(value: unknown) {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value;
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private normalizeArgs(name: string, args: Record<string, unknown>) {
+    if (name === "recipeDraft.addIngredient" && this.isPlainObject(args.ingredient)) {
+      args.ingredient = this.normalizeIngredient(args.ingredient);
+    }
+    if (name === "recipe.search" || name === "product.search") {
+      if (typeof args.limit === "number" && args.limit > 50) {
+        args.limit = 50;
+      }
+    }
+    return args;
+  }
+
+  private normalizeIngredient(ingredient: Record<string, unknown>) {
+    const unitMap: Record<string, string> = {
+      г: "g",
+      гр: "g",
+      грамм: "g",
+      кг: "kg",
+      ml: "ml",
+      мл: "ml",
+      л: "l",
+      шт: "pcs",
+    };
+    if (typeof ingredient.unit === "string") {
+      const key = ingredient.unit.toLowerCase();
+      ingredient.unit = unitMap[key] ?? ingredient.unit;
+    }
+    if (typeof ingredient.name === "string") {
+      ingredient.name = ingredient.name.trim();
+    }
+    return ingredient;
+  }
+
+  private async validateDtoIfPresent(
+    tool: ToolDefinition,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!tool.dtoClass) {
+      return args;
+    }
+    try {
+      const dto = await this.validateDto(tool.dtoClass as new () => object, args);
+      return dto as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof McpValidationError) {
+        throwMcpError(-32000, "VALIDATION_ERROR", {
+          fields: this.toValidationFields(error.errors),
+          hint: "Fix invalid fields and try again.",
+        });
+      }
+      throw error;
+    }
+  }
+
+  private toValidationFields(errors: ValidationError[], parent = ""): Array<{
+    path: string;
+    expected: string;
+    got: string;
+  }> {
+    const fields: Array<{ path: string; expected: string; got: string }> = [];
+    for (const error of errors) {
+      const path = parent ? `${parent}.${error.property}` : error.property;
+      if (error.constraints) {
+        const expected = Object.keys(error.constraints).join("|");
+        fields.push({
+          path,
+          expected,
+          got: this.describeType(error.value),
+        });
+      }
+      if (error.children && error.children.length > 0) {
+        fields.push(...this.toValidationFields(error.children, path));
+      }
+    }
+    return fields;
+  }
+
+  private buildToolRegistry(): Record<string, ToolDefinition> {
+    return {
+      "mcp.capabilities": {
+        name: "mcp.capabilities",
+        description:
+          "List MCP intents and related tools.\nUse to understand available flows.\nReturns grouping by intent.",
+        tags: ["meta"],
+        auth: "none",
+        public: true,
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Load capabilities", arguments: {} }],
+        handler: async (_args, context) => ({
+          text: "✅ MCP capabilities",
+          json: {
+            toolsByIntent: {
+              createRecipe: [
+                "recipeDraft.create",
+                "recipeDraft.addIngredient",
+                "recipeDraft.setSteps",
+                "recipeDraft.validate",
+                "recipeDraft.publish",
+              ],
+              findRecipe: ["recipe.search", "recipe.get"],
+              manageProducts: ["product.search", "product.createManual"],
+            },
+            flows: {
+              recipe: ["create -> addIngredient* -> setSteps -> validate -> publish"],
+            },
+          },
+          meta: { requestId: context.requestId },
+        }),
+      },
+      "mcp.help": {
+        name: "mcp.help",
+        description:
+          "Provide MCP usage hints.\nUse when unsure which tool to call.\nReturns markdown with examples.",
+        tags: ["meta"],
+        auth: "none",
+        public: true,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            topic: { type: ["string", "null"], enum: ["recipes", "products", "auth", "all", null] },
+          },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          { summary: "General help", arguments: {} },
+          { summary: "Recipe-focused", arguments: { topic: "recipes" } },
+        ],
+        handler: async (args, context) => {
+          const topic = typeof args.topic === "string" ? args.topic : "all";
+          const helpText =
+            topic === "products"
+              ? "Products:\n- Search products: recipe asks for ingredients with nutrition, call product.search\n- Create manual: when user provides nutrition per 100g, call product.createManual"
+              : topic === "auth"
+                ? "Auth:\n- user.me returns profile+targets\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates from profile"
+                : "Recipes:\nFlow: recipeDraft.create -> addIngredient* -> setSteps -> validate -> publish\nUse recipe.search/get for published recipes.";
+          const examples = {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "recipeDraft.addIngredient",
+              arguments: {
+                draftId: "draft_123",
+                ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+              },
+            },
+          };
+          return {
+            text: "✅ Help",
+            json: { topic, examples },
+            meta: { requestId: context.requestId },
+          };
+        },
+      },
+      "product.createManual": {
         name: "product.createManual",
-        description: "Create a product manually in FoodieAI",
+        description:
+          "Create a product manually.\nUse when user provides nutrition per 100g.\nReturns productId and product.",
+        tags: ["products"],
+        auth: "none",
         public: false,
         inputSchema: {
           type: "object",
@@ -60,106 +435,81 @@ export class McpService {
           },
           required: ["name", "kcal100", "protein100", "fat100", "carbs100"],
         },
+        outputSchema: {
+          type: "object",
+          properties: { productId: { type: "string" } },
+          required: ["productId"],
+        },
+        examples: [
+          {
+            summary: "Create simple product",
+            arguments: { name: "Salmon", kcal100: 208, protein100: 20, fat100: 13, carbs100: 0 },
+          },
+        ],
+        dtoClass: CreateProductDto,
+        handler: async (args) => {
+          const product = await this.createManual(args);
+          return {
+            text: `✅ Product created: ${product.name}`,
+            json: { productId: product.id, product },
+          };
+        },
       },
-      {
+      "product.search": {
         name: "product.search",
-        description: "Search products by name or brand",
+        description:
+          "Search products by name/brand.\nUse when looking up nutrition for an ingredient.\nReturns list of products.",
+        tags: ["products", "search"],
+        auth: "none",
         public: true,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            query: { type: ["string", "null"] },
-          },
+          properties: { query: { type: ["string", "null"] } },
           required: [],
         },
         outputSchema: {
           type: "object",
-          additionalProperties: false,
           properties: {
             count: { type: "number" },
-            items: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  id: { type: "string" },
-                  name: { type: "string" },
-                  brand: { type: ["string", "null"] },
-                  price: { type: ["number", "null"] },
-                  currency: { type: ["string", "null"] },
-                  store: { type: ["string", "null"] },
-                  url: { type: ["string", "null"] },
-                  image_url: { type: ["string", "null"] },
-                  nutrition: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      kcal100: { type: ["number", "null"] },
-                      protein100: { type: ["number", "null"] },
-                      fat100: { type: ["number", "null"] },
-                      carbs100: { type: ["number", "null"] },
-                    },
-                  },
-                },
-                required: ["id", "name", "brand", "price", "currency", "store", "url", "image_url"],
-              },
-            },
+            items: { type: "array" },
           },
           required: ["count", "items"],
         },
+        examples: [{ summary: "Search yogurt", arguments: { query: "yogurt" } }],
+        handler: async (args, context) => {
+          const results = await this.search(args);
+          return {
+            text: `✅ Products found: ${results.length}`,
+            json: { count: results.length, items: results },
+            meta: { requestId: context.requestId },
+          };
+        },
       },
-      {
+      "user.me": {
         name: "user.me",
-        description: "Get current user and profile",
+        description:
+          "Get current user profile and targets.\nUse when you need context about the user.\nReturns profile and targets.",
+        tags: ["users"],
+        auth: "required",
         public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {},
-          required: [],
-        },
-        outputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            profile: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                firstName: { type: ["string", "null"] },
-                lastName: { type: ["string", "null"] },
-                sex: { type: ["string", "null"], enum: ["FEMALE", "MALE", null] },
-                birthDate: { type: ["string", "null"] },
-                heightCm: { type: ["number", "null"] },
-                weightKg: { type: ["number", "null"] },
-                activityLevel: {
-                  type: ["string", "null"],
-                  enum: ["SEDENTARY", "LIGHT", "MODERATE", "VERY_ACTIVE", null],
-                },
-                goal: { type: ["string", "null"], enum: ["MAINTAIN", "LOSE", "GAIN", null] },
-                calorieDelta: { type: ["number", "null"] },
-              },
-            },
-            targets: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                kcal: { type: ["number", "null"] },
-                protein: { type: ["number", "null"] },
-                fat: { type: ["number", "null"] },
-                carbs: { type: ["number", "null"] },
-              },
-              required: ["kcal", "protein", "fat", "carbs"],
-            },
-          },
-          required: ["profile", "targets"],
+        inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Current user", arguments: {} }],
+        handler: async (_args, context) => {
+          const data = await this.userMe(context.userId as string);
+          return {
+            text: "✅ User profile loaded",
+            json: { userId: context.userId, user: data },
+          };
         },
       },
-      {
+      "userProfile.upsert": {
         name: "userProfile.upsert",
-        description: "Create or update user profile and calculate targets",
+        description:
+          "Create or update user profile.\nUse when user provides personal data for targets.\nReturns saved profile.",
+        tags: ["users"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
@@ -180,37 +530,53 @@ export class McpService {
           },
           required: [],
         },
-        outputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            profile: { type: "object" },
+        outputSchema: { type: "object", properties: { profile: { type: "object" } } },
+        examples: [
+          {
+            summary: "Set profile",
+            arguments: {
+              firstName: "Ira",
+              sex: "FEMALE",
+              heightCm: 168,
+              weightKg: 63,
+              activityLevel: "MODERATE",
+              goal: "LOSE",
+            },
           },
-          required: ["profile"],
+        ],
+        dtoClass: UpsertUserProfileDto,
+        handler: async (args, context) => {
+          const profile = await this.upsertUserProfile(context.userId as string, args);
+          return {
+            text: "✅ Profile saved",
+            json: { profileId: profile?.id ?? null, profile },
+          };
         },
       },
-      {
+      "userTargets.recalculate": {
         name: "userTargets.recalculate",
-        description: "Recalculate daily calorie and macro targets",
+        description:
+          "Recalculate macro targets.\nUse after profile updates.\nReturns updated profile targets.",
+        tags: ["users"],
+        auth: "required",
         public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {},
-          required: [],
-        },
-        outputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            profile: { type: "object" },
-          },
-          required: ["profile"],
+        inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Recalculate", arguments: {} }],
+        handler: async (_args, context) => {
+          const profile = await this.recalculateTargets(context.userId as string);
+          return {
+            text: "✅ Targets recalculated",
+            json: { profileId: profile?.id ?? null, profile },
+          };
         },
       },
-      {
+      "recipeDraft.create": {
         name: "recipeDraft.create",
-        description: "Create a recipe draft",
+        description:
+          "Create a recipe draft.\nUse when starting a new recipe, even incomplete.\nReturns draftId.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
@@ -223,10 +589,22 @@ export class McpService {
           },
           required: ["title"],
         },
+        outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
+        examples: [{ summary: "Create draft", arguments: { title: "Omelette", category: "breakfast" } }],
+        dtoClass: CreateRecipeDraftDto,
+        handler: async (args) => {
+          const draft = await this.recipeDraftsService.createDraft(
+            args as unknown as CreateRecipeDraftDto,
+          );
+          return { text: "✅ Draft created", json: { draftId: draft.id, draft } };
+        },
       },
-      {
+      "recipeDraft.addIngredient": {
         name: "recipeDraft.addIngredient",
-        description: "Add an ingredient to a recipe draft",
+        description:
+          "Add ingredient to draft.\nUse when user lists ingredients or quantities.\nReturns draft with ingredients.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
@@ -261,77 +639,224 @@ export class McpService {
           },
           required: ["draftId", "ingredient"],
         },
+        outputSchema: { type: "object" },
+        examples: [
+          {
+            summary: "Add snapshot ingredient",
+            arguments: {
+              draftId: "draft_123",
+              ingredient: {
+                name: "Tomato",
+                amount: 120,
+                unit: "g",
+                macrosPer100: { kcal100: 18, protein100: 0.9, fat100: 0.2, carbs100: 3.9 },
+              },
+            },
+          },
+        ],
+        dtoClass: AddRecipeDraftIngredientDto,
+        handler: async (args) => {
+          try {
+            const draft = await this.recipeDraftsService.addIngredient(
+              args.draftId as string,
+              args.ingredient as AddRecipeDraftIngredientDto["ingredient"],
+            );
+            return { text: "✅ Ingredient added", json: { draftId: draft.id, draft } };
+          } catch (error) {
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipeDraft.removeIngredient": {
         name: "recipeDraft.removeIngredient",
-        description: "Remove an ingredient from a recipe draft",
+        description:
+          "Remove ingredient from draft.\nUse to delete an ingredient.\nReturns remaining ingredients.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-            ingredientId: { type: "string" },
-          },
+          properties: { draftId: { type: "string" }, ingredientId: { type: "string" } },
           required: ["draftId", "ingredientId"],
         },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Remove ingredient", arguments: { draftId: "draft_123", ingredientId: "ing_1" } }],
+        dtoClass: RemoveRecipeDraftIngredientDto,
+        handler: async (args) => {
+          try {
+            const ingredients = await this.recipeDraftsService.removeIngredient(
+              args.draftId as string,
+              args.ingredientId as string,
+            );
+            return {
+              text: "✅ Ingredient removed",
+              json: { draftId: args.draftId, ingredientId: args.ingredientId, ingredients },
+            };
+          } catch (error) {
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipeDraft.setSteps": {
         name: "recipeDraft.setSteps",
-        description: "Replace steps for a recipe draft",
+        description:
+          "Replace draft steps.\nUse after collecting ordered instructions.\nReturns updated steps.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-            steps: { type: "array", items: { type: "string" } },
-          },
+          properties: { draftId: { type: "string" }, steps: { type: "array", items: { type: "string" } } },
           required: ["draftId", "steps"],
         },
+        outputSchema: { type: "object" },
+        examples: [
+          {
+            summary: "Set steps",
+            arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook in pan", "Serve"] },
+          },
+        ],
+        dtoClass: SetRecipeDraftStepsDto,
+        handler: async (args) => {
+          try {
+            const steps = await this.recipeDraftsService.setSteps(
+              args.draftId as string,
+              args.steps as string[],
+            );
+            return { text: "✅ Steps updated", json: { draftId: args.draftId, steps } };
+          } catch (error) {
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipeDraft.get": {
         name: "recipeDraft.get",
-        description: "Get a recipe draft by id",
+        description:
+          "Get draft by id.\nUse to inspect current ingredients/steps.\nReturns draft.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-          },
+          properties: { draftId: { type: "string" } },
           required: ["draftId"],
         },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Get draft", arguments: { draftId: "draft_123" } }],
+        dtoClass: DraftIdDto,
+        handler: async (args) => {
+          try {
+            const draft = await this.recipeDraftsService.getDraft(args.draftId as string);
+            return { text: "✅ Draft loaded", json: { draftId: draft.id, draft } };
+          } catch (error) {
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipeDraft.validate": {
         name: "recipeDraft.validate",
-        description: "Validate a recipe draft without throwing",
+        description:
+          "Validate draft softly.\nUse before publish to find gaps.\nReturns validation result (no throw).",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-          },
+          properties: { draftId: { type: "string" } },
           required: ["draftId"],
         },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Validate draft", arguments: { draftId: "draft_123" } }],
+        dtoClass: DraftIdDto,
+        handler: async (args) => {
+          try {
+            const validation = await this.recipeDraftsService.validateDraft(args.draftId as string);
+            return {
+              text: validation.isValid ? "✅ Draft valid" : "⚠️ Draft incomplete",
+              json: { draftId: args.draftId, ...validation },
+            };
+          } catch (error) {
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipeDraft.publish": {
         name: "recipeDraft.publish",
-        description: "Publish a recipe draft",
+        description:
+          "Publish draft into recipe.\nUse after validation passes.\nReturns recipeId.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-          },
+          properties: { draftId: { type: "string" } },
           required: ["draftId"],
         },
+        outputSchema: { type: "object", properties: { recipeId: { type: "string" } } },
+        examples: [{ summary: "Publish draft", arguments: { draftId: "draft_123" } }],
+        dtoClass: DraftIdDto,
+        handler: async (args) => {
+          try {
+            const recipe = await this.recipeDraftsService.publishDraft(args.draftId as string);
+            return {
+              text: `✅ Draft published: ${recipe.title}`,
+              json: { recipeId: recipe.id, title: recipe.title, recipe },
+            };
+          } catch (error) {
+            if (error instanceof DraftIncompleteError) {
+              throwMcpError(-32000, "DRAFT_INCOMPLETE", {
+                missingFields: error.missingFields,
+                missingIngredients: error.missingIngredients,
+                nextActions: [
+                  { askUser: "Provide productId or macrosPer100 for missing ingredients." },
+                  {
+                    callTool: "recipeDraft.addIngredient",
+                    argumentsExample: {
+                      draftId: args.draftId,
+                      ingredient: {
+                        name: "Ingredient name",
+                        productId: "prod_123",
+                        amount: 100,
+                        unit: "g",
+                      },
+                    },
+                  },
+                ],
+              });
+            }
+            if (error instanceof RecipeDraftNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
+        },
       },
-      {
+      "recipe.search": {
         name: "recipe.search",
-        description: "Search recipes",
+        description:
+          "Search published recipes.\nUse when user asks for ideas or existing recipes.\nReturns recipe list.",
+        tags: ["recipes"],
+        auth: "none",
         public: true,
         inputSchema: {
           type: "object",
@@ -343,99 +868,53 @@ export class McpService {
           },
           required: [],
         },
-        outputSchema: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              id: { type: "string" },
-              title: { type: "string" },
-              category: { type: ["string", "null"] },
-              updatedAt: { type: "string" },
-            },
-            required: ["id", "title", "category", "updatedAt"],
-          },
-        },
+        outputSchema: { type: "array", items: { type: "object" } },
         examples: [
-          {
-            summary: "Search breakfast ideas",
-            arguments: { query: "omelette", category: "breakfast", limit: 5 },
-          },
-          {
-            summary: "List latest (no filters)",
-            arguments: {},
-          },
+          { summary: "Search breakfast", arguments: { query: "omelette", category: "breakfast", limit: 5 } },
         ],
+        dtoClass: SearchRecipesDto,
+        handler: async (args) => {
+          const recipes = await this.searchRecipes(args);
+          return {
+            text: `✅ Recipes found: ${recipes.length}`,
+            json: recipes,
+          };
+        },
       },
-      {
+      "recipe.get": {
         name: "recipe.get",
-        description: "Get a recipe by id",
+        description:
+          "Get recipe by id.\nUse after search or publish.\nReturns recipe with ingredients and steps.",
+        tags: ["recipes"],
+        auth: "none",
         public: true,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: {
-            recipeId: { type: "string" },
-          },
+          properties: { recipeId: { type: "string" } },
           required: ["recipeId"],
         },
-        outputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            id: { type: "string" },
-            title: { type: "string" },
-            category: { type: ["string", "null"] },
-            description: { type: ["string", "null"] },
-            servings: { type: ["number", "null"] },
-            ingredients: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  id: { type: "string" },
-                  order: { type: ["number", "null"] },
-                  originalText: { type: ["string", "null"] },
-                  name: { type: "string" },
-                  amount: { type: ["number", "null"] },
-                  unit: { type: ["string", "null"] },
-                  productId: { type: ["string", "null"] },
-                  kcal100: { type: ["number", "null"] },
-                  protein100: { type: ["number", "null"] },
-                  fat100: { type: ["number", "null"] },
-                  carbs100: { type: ["number", "null"] },
-                  assumptions: { type: ["object", "null"] },
-                },
-                required: ["id", "name"],
-              },
-            },
-            steps: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  id: { type: "string" },
-                  order: { type: "number" },
-                  text: { type: "string" },
-                },
-                required: ["id", "order", "text"],
-              },
-            },
-          },
-          required: ["id", "title", "category", "description", "servings", "ingredients", "steps"],
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Load recipe", arguments: { recipeId: "rec_123" } }],
+        dtoClass: RecipeIdDto,
+        handler: async (args) => {
+          try {
+            const recipe = await this.getRecipe(args);
+            return {
+              text: `✅ Recipe loaded: ${recipe.title}`,
+              json: { recipeId: recipe.id, recipe },
+            };
+          } catch (error) {
+            if (error instanceof RecipeNotFoundError) {
+              throwMcpError(404, "NOT_FOUND");
+            }
+            throw error;
+          }
         },
-        examples: [
-          {
-            summary: "Get recipe by id",
-            arguments: { recipeId: "rec_123" },
-          },
-        ],
       },
-    ];
+    };
   }
+
 
   // MCP tool: product.createManual
   async createManual(args: Record<string, unknown>) {
