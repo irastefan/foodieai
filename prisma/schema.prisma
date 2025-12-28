@@ -24,6 +24,16 @@ enum ProductSource {
   AI_ESTIMATED
 }
 
+enum RecipeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum RecipeVisibility {
+  PRIVATE
+  PUBLIC
+}
+
 enum Sex {
   FEMALE
   MALE
@@ -90,5 +100,102 @@ model Product {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  recipeDraftIngredients RecipeDraftIngredient[]
+  recipeIngredients      RecipeIngredient[]
+
   @@index([normalizedName])
+}
+
+model RecipeDraft {
+  id          String       @id @default(cuid())
+  ownerUserId String?
+  title       String
+  category    String?
+  description String?
+  servings    Int?
+  status      RecipeStatus @default(DRAFT)
+
+  ingredients RecipeDraftIngredient[]
+  steps       RecipeDraftStep[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RecipeDraftIngredient {
+  id           String      @id @default(cuid())
+  draftId      String
+  draft        RecipeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  order        Int?
+  originalText String?
+  name         String
+  amount       Float?
+  unit         String?
+
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+
+  kcal100     Float?
+  protein100  Float?
+  fat100      Float?
+  carbs100    Float?
+
+  assumptions Json?
+  createdAt   DateTime @default(now())
+}
+
+model RecipeDraftStep {
+  id      String      @id @default(cuid())
+  draftId String
+  draft   RecipeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  order   Int
+  text    String
+}
+
+model Recipe {
+  id          String           @id @default(cuid())
+  ownerUserId String?
+  title       String
+  category    String?
+  description String?
+  servings    Int?
+  visibility  RecipeVisibility @default(PRIVATE)
+
+  ingredients RecipeIngredient[]
+  steps       RecipeStep[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RecipeIngredient {
+  id           String  @id @default(cuid())
+  recipeId     String
+  recipe       Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  order        Int?
+  originalText String?
+  name         String
+  amount       Float?
+  unit         String?
+
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+
+  kcal100     Float?
+  protein100  Float?
+  fat100      Float?
+  carbs100    Float?
+  assumptions Json?
+}
+
+model RecipeStep {
+  id       String @id @default(cuid())
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  order    Int
+  text     String
 }
