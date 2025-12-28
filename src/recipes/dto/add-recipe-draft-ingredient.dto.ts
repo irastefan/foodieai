@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import {
   IsDefined,
   IsInt,
@@ -50,7 +51,7 @@ class RecipeDraftIngredientInputDto {
 
   @IsOptional()
   @IsObject()
-  assumptions?: Record<string, unknown> | null;
+  assumptions?: Prisma.JsonObject | null;
 
   @IsOptional()
   @IsInt()

@@ -87,7 +87,7 @@ export class RecipeDraftsService {
         protein100: ingredient.macrosPer100?.protein100 ?? null,
         fat100: ingredient.macrosPer100?.fat100 ?? null,
         carbs100: ingredient.macrosPer100?.carbs100 ?? null,
-        assumptions: ingredient.assumptions ?? null,
+        assumptions: this.toNullableJson(ingredient.assumptions),
       },
     });
 
@@ -208,7 +208,7 @@ export class RecipeDraftsService {
                 protein100: ingredient.protein100,
                 fat100: ingredient.fat100,
                 carbs100: ingredient.carbs100,
-                assumptions: ingredient.assumptions as Prisma.JsonValue,
+                assumptions: this.toNullableJson(ingredient.assumptions),
               })),
             },
           },
@@ -234,6 +234,18 @@ export class RecipeDraftsService {
 
       return recipe;
     });
+  }
+
+  private toNullableJson(
+    value: Prisma.JsonValue | null | undefined,
+  ): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return Prisma.JsonNull;
+    }
+    return value as Prisma.InputJsonValue;
   }
 
   private async nextIngredientOrder(draftId: string) {

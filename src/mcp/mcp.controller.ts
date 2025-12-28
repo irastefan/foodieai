@@ -76,6 +76,14 @@ export class McpController {
               name: "userTargets.recalculate",
               description: "Recalculate daily calorie and macro targets",
             },
+            {
+              name: "recipe.search",
+              description: "Search recipes",
+            },
+            {
+              name: "recipe.get",
+              description: "Get a recipe by id",
+            },
           ],
         },
       },
@@ -176,6 +184,36 @@ export class McpController {
           params: {
             name: "userTargets.recalculate",
             arguments: {},
+          },
+        },
+      },
+      toolsCallRecipeSearch: {
+        summary: "Search recipes",
+        value: {
+          jsonrpc: "2.0",
+          id: 13,
+          method: "tools/call",
+          params: {
+            name: "recipe.search",
+            arguments: {
+              query: "omelette",
+              category: "breakfast",
+              limit: 5,
+            },
+          },
+        },
+      },
+      toolsCallRecipeGet: {
+        summary: "Get recipe by id",
+        value: {
+          jsonrpc: "2.0",
+          id: 14,
+          method: "tools/call",
+          params: {
+            name: "recipe.get",
+            arguments: {
+              recipeId: "rec_123",
+            },
           },
         },
       },

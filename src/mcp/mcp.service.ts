@@ -343,6 +343,30 @@ export class McpService {
           },
           required: [],
         },
+        outputSchema: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              category: { type: ["string", "null"] },
+              updatedAt: { type: "string" },
+            },
+            required: ["id", "title", "category", "updatedAt"],
+          },
+        },
+        examples: [
+          {
+            summary: "Search breakfast ideas",
+            arguments: { query: "omelette", category: "breakfast", limit: 5 },
+          },
+          {
+            summary: "List latest (no filters)",
+            arguments: {},
+          },
+        ],
       },
       {
         name: "recipe.get",
@@ -356,6 +380,59 @@ export class McpService {
           },
           required: ["recipeId"],
         },
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            category: { type: ["string", "null"] },
+            description: { type: ["string", "null"] },
+            servings: { type: ["number", "null"] },
+            ingredients: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  id: { type: "string" },
+                  order: { type: ["number", "null"] },
+                  originalText: { type: ["string", "null"] },
+                  name: { type: "string" },
+                  amount: { type: ["number", "null"] },
+                  unit: { type: ["string", "null"] },
+                  productId: { type: ["string", "null"] },
+                  kcal100: { type: ["number", "null"] },
+                  protein100: { type: ["number", "null"] },
+                  fat100: { type: ["number", "null"] },
+                  carbs100: { type: ["number", "null"] },
+                  assumptions: { type: ["object", "null"] },
+                },
+                required: ["id", "name"],
+              },
+            },
+            steps: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  id: { type: "string" },
+                  order: { type: "number" },
+                  text: { type: "string" },
+                },
+                required: ["id", "order", "text"],
+              },
+            },
+          },
+          required: ["id", "title", "category", "description", "servings", "ingredients", "steps"],
+        },
+        examples: [
+          {
+            summary: "Get recipe by id",
+            arguments: { recipeId: "rec_123" },
+          },
+        ],
       },
     ];
   }
