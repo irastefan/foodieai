@@ -961,6 +961,9 @@ export class McpService {
             return {
               text: validation.isValid ? "✅ Draft valid" : "⚠️ Draft incomplete",
               json: { draftId: args.draftId, ...validation },
+              meta: validation.isValid
+                ? { status: "VALID" }
+                : { status: "INCOMPLETE", missingFields: validation.missingFields },
             };
           } catch (error) {
             if (error instanceof RecipeDraftNotFoundError) {

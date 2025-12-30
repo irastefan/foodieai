@@ -1,13 +1,25 @@
 import { randomUUID } from "crypto";
 
-export type McpContent = { type: "text"; text: string };
+export type McpContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+  | { type: "audio"; data: string; mimeType: string }
+  | { type: "resource_link"; name: string; uri: string }
+  | { type: "resource"; resource: unknown };
 
-export type McpResult = {
-  content: McpContent[];
-  isError: false;
-  data?: unknown;
-  meta?: Record<string, unknown>;
-};
+export type McpResult =
+  | {
+      content: McpContent[];
+      isError: false;
+      data?: unknown;
+      meta?: Record<string, unknown>;
+    }
+  | {
+      content: McpContent[];
+      isError: true;
+      data?: unknown;
+      meta?: Record<string, unknown>;
+    };
 
 export class McpHandledError extends Error {
   code: number;
@@ -25,32 +37,44 @@ export function throwMcpError(code: number, message: string, data?: unknown): ne
 }
 
 export function buildMcpResult(
-  text: string,
-  json?: unknown,
+  message: string,
+  payload?: unknown,
   meta?: Record<string, unknown>,
 ): McpResult {
-  const content: McpContent[] = [{ type: "text", text }];
-  if (json !== undefined) {
+  const content: McpContent[] = [
+    {
+      type: "text",
+      text:
+        payload === undefined
+          ? message
+          : `${message}\n\n${typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)}`,
+    },
+  ];
+  if (meta) {
     content.push({
       type: "text",
-      text: typeof json === "string" ? json : JSON.stringify(json, null, 2),
+      text: JSON.stringify({ _meta: meta }),
     });
   }
-  if (meta !== undefined) {
-    content.push({ type: "text", text: JSON.stringify({ _meta: meta }) });
-  }
-  return { content, isError: false, data: json, meta };
+  return { content, isError: false, data: payload, meta };
 }
 
 export function buildMcpErrorResult(
   message: string,
   meta?: Record<string, unknown>,
   data?: unknown,
-) {
-  const content: McpContent[] = [{ type: "text", text: message }];
+): McpResult {
   return {
-    content,
-    isError: true as const,
+    content: [
+      {
+        type: "text",
+        text:
+          data === undefined
+            ? `❌ ${message}`
+            : `❌ ${message}\n\n${typeof data === "string" ? data : JSON.stringify(data, null, 2)}`,
+      },
+    ],
+    isError: true,
     ...(meta ? { meta } : {}),
     ...(data ? { data } : {}),
   };
