@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, RecipeDraft, RecipeDraftIngredient, RecipeDraftStep } from "@prisma/client";
+import { Prisma, Recipe, RecipeDraft, RecipeDraftIngredient, RecipeDraftStep } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { DraftIncompleteError, RecipeDraftNotFoundError } from "./recipes.errors";
 
@@ -62,90 +62,217 @@ export class RecipeDraftsService {
         fat100: number;
         carbs100: number;
       } | null;
+      clientRequestId?: string | null;
     },
+    clientRequestId?: string | null,
   ) {
-    const draft = await this.prisma.recipeDraft.findUnique({
-      where: { id: draftId },
+    const key = clientRequestId ?? ingredient.clientRequestId ?? null;
+
+    const { result } = await this.prisma.$transaction(async (prisma) => {
+      const tx = prisma as Prisma.TransactionClient & { idempotencyKey?: any };
+      if (key && tx.idempotencyKey) {
+        const existingKey = await tx.idempotencyKey.findUnique({
+          where: {
+            operation_key_entityId: {
+              operation: "recipeDraft.addIngredient",
+              key,
+              entityId: draftId,
+            },
+          },
+        });
+        if (existingKey?.result) {
+          return { result: existingKey.result as DraftWithRelations, replay: true };
+        }
+      }
+
+      const draft = await prisma.recipeDraft.findUnique({
+        where: { id: draftId },
+      });
+      if (!draft) {
+        throw new RecipeDraftNotFoundError();
+      }
+
+      const order = ingredient.order ?? (await this.nextIngredientOrderTx(prisma, draftId));
+
+      const existingByOrder = await prisma.recipeDraftIngredient.findFirst({
+        where: { draftId, order },
+      });
+
+      if (existingByOrder) {
+        await prisma.recipeDraftIngredient.update({
+          where: { id: existingByOrder.id },
+          data: {
+            originalText: ingredient.originalText ?? null,
+            name: ingredient.name,
+            amount: ingredient.amount ?? null,
+            unit: ingredient.unit ?? null,
+            productId: ingredient.productId ?? null,
+            kcal100: ingredient.macrosPer100?.kcal100 ?? null,
+            protein100: ingredient.macrosPer100?.protein100 ?? null,
+            fat100: ingredient.macrosPer100?.fat100 ?? null,
+            carbs100: ingredient.macrosPer100?.carbs100 ?? null,
+            assumptions: this.toNullableJson(ingredient.assumptions),
+          },
+        });
+      } else {
+        await prisma.recipeDraftIngredient.create({
+          data: {
+            draftId,
+            order,
+            originalText: ingredient.originalText ?? null,
+            name: ingredient.name,
+            amount: ingredient.amount ?? null,
+            unit: ingredient.unit ?? null,
+            productId: ingredient.productId ?? null,
+            kcal100: ingredient.macrosPer100?.kcal100 ?? null,
+            protein100: ingredient.macrosPer100?.protein100 ?? null,
+            fat100: ingredient.macrosPer100?.fat100 ?? null,
+            carbs100: ingredient.macrosPer100?.carbs100 ?? null,
+            assumptions: this.toNullableJson(ingredient.assumptions),
+          },
+        });
+      }
+
+      const draftWithRelations = (await prisma.recipeDraft.findUnique({
+        where: { id: draftId },
+        include: {
+          ingredients: { orderBy: { order: "asc" } },
+          steps: { orderBy: { order: "asc" } },
+        },
+      })) as DraftWithRelations;
+
+      if (key && tx.idempotencyKey) {
+        await tx.idempotencyKey.create({
+          data: {
+            operation: "recipeDraft.addIngredient",
+            key,
+            entityId: draftId,
+            result: draftWithRelations,
+          },
+        });
+      }
+
+      return { result: draftWithRelations };
     });
-    if (!draft) {
-      throw new RecipeDraftNotFoundError();
-    }
 
-    const order =
-      ingredient.order ?? (await this.nextIngredientOrder(draftId));
-
-    await this.prisma.recipeDraftIngredient.create({
-      data: {
-        draftId,
-        order,
-        originalText: ingredient.originalText ?? null,
-        name: ingredient.name,
-        amount: ingredient.amount ?? null,
-        unit: ingredient.unit ?? null,
-        productId: ingredient.productId ?? null,
-        kcal100: ingredient.macrosPer100?.kcal100 ?? null,
-        protein100: ingredient.macrosPer100?.protein100 ?? null,
-        fat100: ingredient.macrosPer100?.fat100 ?? null,
-        carbs100: ingredient.macrosPer100?.carbs100 ?? null,
-        assumptions: this.toNullableJson(ingredient.assumptions),
-      },
-    });
-
-    return this.getDraft(draftId);
+    return result;
   }
 
-  async removeIngredient(draftId: string, ingredientId: string) {
-    const draft = await this.prisma.recipeDraft.findUnique({
-      where: { id: draftId },
-    });
-    if (!draft) {
-      throw new RecipeDraftNotFoundError();
-    }
+  async removeIngredient(draftId: string, ingredientId: string, clientRequestId?: string | null) {
+    const key = clientRequestId ?? null;
 
-    const result = await this.prisma.recipeDraftIngredient.deleteMany({
-      where: { id: ingredientId, draftId },
+    const { result } = await this.prisma.$transaction(async (prisma) => {
+      const tx = prisma as Prisma.TransactionClient & { idempotencyKey?: any };
+      if (key && tx.idempotencyKey) {
+        const existingKey = await tx.idempotencyKey.findUnique({
+          where: {
+            operation_key_entityId: {
+              operation: "recipeDraft.removeIngredient",
+              key,
+              entityId: draftId,
+            },
+          },
+        });
+        if (existingKey?.result) {
+          return { result: existingKey.result as RecipeDraftIngredient[] };
+        }
+      }
+
+      const draft = await prisma.recipeDraft.findUnique({
+        where: { id: draftId },
+      });
+      if (!draft) {
+        throw new RecipeDraftNotFoundError();
+      }
+
+      const deletion = await prisma.recipeDraftIngredient.deleteMany({
+        where: { id: ingredientId, draftId },
+      });
+
+      if (deletion.count === 0) {
+        throw new RecipeDraftNotFoundError();
+      }
+
+      const ingredients = await prisma.recipeDraftIngredient.findMany({
+        where: { draftId },
+        orderBy: { order: "asc" },
+      });
+
+      if (key && tx.idempotencyKey) {
+        await tx.idempotencyKey.create({
+          data: {
+            operation: "recipeDraft.removeIngredient",
+            key,
+            entityId: draftId,
+            result: ingredients,
+          },
+        });
+      }
+
+      return { result: ingredients };
     });
 
-    if (result.count === 0) {
-      throw new RecipeDraftNotFoundError();
-    }
-
-    return this.prisma.recipeDraftIngredient.findMany({
-      where: { draftId },
-      orderBy: { order: "asc" },
-    });
+    return result;
   }
 
-  async setSteps(draftId: string, steps: string[]) {
-    const draft = await this.prisma.recipeDraft.findUnique({
-      where: { id: draftId },
-    });
-    if (!draft) {
-      throw new RecipeDraftNotFoundError();
-    }
+  async setSteps(draftId: string, steps: string[], clientRequestId?: string | null) {
+    const key = clientRequestId ?? null;
 
-    const operations: Prisma.PrismaPromise<unknown>[] = [
-      this.prisma.recipeDraftStep.deleteMany({ where: { draftId } }),
-    ];
+    const { result } = await this.prisma.$transaction(async (prisma) => {
+      const tx = prisma as Prisma.TransactionClient & { idempotencyKey?: any };
+      if (key && tx.idempotencyKey) {
+        const existingKey = await tx.idempotencyKey.findUnique({
+          where: {
+            operation_key_entityId: {
+              operation: "recipeDraft.setSteps",
+              key,
+              entityId: draftId,
+            },
+          },
+        });
+        if (existingKey?.result) {
+          return { result: existingKey.result as RecipeDraftStep[] };
+        }
+      }
 
-    if (steps.length > 0) {
-      operations.push(
-        this.prisma.recipeDraftStep.createMany({
+      const draft = await prisma.recipeDraft.findUnique({
+        where: { id: draftId },
+      });
+      if (!draft) {
+        throw new RecipeDraftNotFoundError();
+      }
+
+      await prisma.recipeDraftStep.deleteMany({ where: { draftId } });
+      if (steps.length > 0) {
+        await prisma.recipeDraftStep.createMany({
           data: steps.map((text, index) => ({
             draftId,
             order: index + 1,
             text,
           })),
-        }),
-      );
-    }
+        });
+      }
 
-    await this.prisma.$transaction(operations);
+      const resultSteps = await prisma.recipeDraftStep.findMany({
+        where: { draftId },
+        orderBy: { order: "asc" },
+      });
 
-    return this.prisma.recipeDraftStep.findMany({
-      where: { draftId },
-      orderBy: { order: "asc" },
+      if (key && tx.idempotencyKey) {
+        await tx.idempotencyKey.create({
+          data: {
+            operation: "recipeDraft.setSteps",
+            key,
+            entityId: draftId,
+            result: resultSteps,
+          },
+        });
+      }
+
+      return { result: resultSteps };
     });
+
+    return result;
   }
 
   async getDraft(draftId: string): Promise<DraftWithRelations> {
@@ -169,7 +296,25 @@ export class RecipeDraftsService {
     return this.evaluateDraft(draft);
   }
 
-  async publishDraft(draftId: string) {
+  async publishDraft(draftId: string, clientRequestId?: string | null) {
+    const key = clientRequestId ?? null;
+
+    const idempotencyClient = this.prisma as any;
+    const existingFromKey = key && idempotencyClient.idempotencyKey
+      ? await idempotencyClient.idempotencyKey.findUnique({
+          where: {
+            operation_key_entityId: {
+              operation: "recipeDraft.publish",
+              key,
+              entityId: draftId,
+            },
+          },
+        })
+      : null;
+    if (existingFromKey?.result) {
+      return existingFromKey.result as Recipe;
+    }
+
     const draft = await this.getDraft(draftId);
     const validation = this.evaluateDraft(draft);
 
@@ -188,7 +333,7 @@ export class RecipeDraftsService {
       hasSnapshotIngredient,
     );
 
-    return this.prisma.$transaction(async (prisma) => {
+    const recipe = await this.prisma.$transaction(async (prisma) => {
       const recipe = await prisma.recipe.create({
         data: {
           title: draft.title,
@@ -234,6 +379,19 @@ export class RecipeDraftsService {
 
       return recipe;
     });
+
+    if (key && idempotencyClient.idempotencyKey) {
+      await idempotencyClient.idempotencyKey.create({
+        data: {
+          operation: "recipeDraft.publish",
+          key,
+          entityId: draftId,
+          result: recipe,
+        },
+      });
+    }
+
+    return recipe;
   }
 
   private toNullableJson(
@@ -250,6 +408,14 @@ export class RecipeDraftsService {
 
   private async nextIngredientOrder(draftId: string) {
     const aggregation = await this.prisma.recipeDraftIngredient.aggregate({
+      where: { draftId },
+      _max: { order: true },
+    });
+    return (aggregation._max.order ?? 0) + 1;
+  }
+
+  private async nextIngredientOrderTx(prisma: Prisma.TransactionClient, draftId: string) {
+    const aggregation = await prisma.recipeDraftIngredient.aggregate({
       where: { draftId },
       _max: { order: true },
     });

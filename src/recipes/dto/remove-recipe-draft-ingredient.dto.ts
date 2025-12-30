@@ -1,4 +1,4 @@
-import { IsString } from "class-validator";
+import { IsOptional, IsString } from "class-validator";
 
 export class RemoveRecipeDraftIngredientDto {
   @IsString()
@@ -6,4 +6,8 @@ export class RemoveRecipeDraftIngredientDto {
 
   @IsString()
   ingredientId!: string;
+
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string | null;
 }

@@ -1,4 +1,4 @@
-import { IsArray, IsString } from "class-validator";
+import { IsArray, IsOptional, IsString } from "class-validator";
 
 export class SetRecipeDraftStepsDto {
   @IsString()
@@ -7,4 +7,8 @@ export class SetRecipeDraftStepsDto {
   @IsArray()
   @IsString({ each: true })
   steps!: string[];
+
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string | null;
 }

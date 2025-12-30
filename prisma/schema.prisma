@@ -127,7 +127,7 @@ model RecipeDraftIngredient {
   draftId      String
   draft        RecipeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
 
-  order        Int?
+  order        Int
   originalText String?
   name         String
   amount       Float?
@@ -143,6 +143,8 @@ model RecipeDraftIngredient {
 
   assumptions Json?
   createdAt   DateTime @default(now())
+
+  @@unique([draftId, order])
 }
 
 model RecipeDraftStep {
@@ -198,4 +200,15 @@ model RecipeStep {
 
   order    Int
   text     String
+}
+
+model IdempotencyKey {
+  id        String   @id @default(cuid())
+  key       String
+  operation String
+  entityId  String?
+  result    Json?
+  createdAt DateTime @default(now())
+
+  @@unique([operation, key, entityId])
 }

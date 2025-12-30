@@ -715,6 +715,7 @@ export class McpService {
           additionalProperties: false,
           properties: {
             draftId: { type: "string" },
+            clientRequestId: { type: ["string", "null"] },
             ingredient: {
               type: "object",
               additionalProperties: false,
@@ -724,6 +725,7 @@ export class McpService {
                 amount: { type: ["number", "null"] },
                 unit: { type: ["string", "null"] },
                 productId: { type: ["string", "null"] },
+                clientRequestId: { type: ["string", "null"] },
                 macrosPer100: {
                   type: ["object", "null"],
                   additionalProperties: false,
@@ -781,6 +783,9 @@ export class McpService {
             const draft = await this.recipeDraftsService.addIngredient(
               args.draftId as string,
               args.ingredient as AddRecipeDraftIngredientDto["ingredient"],
+              (args.clientRequestId as string | null | undefined) ??
+                (args.ingredient as AddRecipeDraftIngredientDto["ingredient"]).clientRequestId ??
+                null,
             );
             return { text: "✅ Ingredient added", json: { draftId: draft.id, draft } };
           } catch (error) {
@@ -801,7 +806,11 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { draftId: { type: "string" }, ingredientId: { type: "string" } },
+          properties: {
+            draftId: { type: "string" },
+            ingredientId: { type: "string" },
+            clientRequestId: { type: ["string", "null"] },
+          },
           required: ["draftId", "ingredientId"],
         },
         outputSchema: { type: "object" },
@@ -826,6 +835,7 @@ export class McpService {
             const ingredients = await this.recipeDraftsService.removeIngredient(
               args.draftId as string,
               args.ingredientId as string,
+              args.clientRequestId as string | null | undefined,
             );
             return {
               text: "✅ Ingredient removed",
@@ -849,7 +859,11 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { draftId: { type: "string" }, steps: { type: "array", items: { type: "string" } } },
+          properties: {
+            draftId: { type: "string" },
+            steps: { type: "array", items: { type: "string" } },
+            clientRequestId: { type: ["string", "null"] },
+          },
           required: ["draftId", "steps"],
         },
         outputSchema: { type: "object" },
@@ -879,6 +893,7 @@ export class McpService {
             const steps = await this.recipeDraftsService.setSteps(
               args.draftId as string,
               args.steps as string[],
+              args.clientRequestId as string | null | undefined,
             );
             return { text: "✅ Steps updated", json: { draftId: args.draftId, steps } };
           } catch (error) {
@@ -899,7 +914,7 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { draftId: { type: "string" } },
+          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
           required: ["draftId"],
         },
         outputSchema: { type: "object" },
@@ -938,7 +953,7 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { draftId: { type: "string" } },
+          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
           required: ["draftId"],
         },
         outputSchema: { type: "object" },
@@ -1002,7 +1017,10 @@ export class McpService {
         dtoClass: DraftIdDto,
         handler: async (args) => {
           try {
-            const recipe = await this.recipeDraftsService.publishDraft(args.draftId as string);
+            const recipe = await this.recipeDraftsService.publishDraft(
+              args.draftId as string,
+              args.clientRequestId as string | null | undefined,
+            );
             return {
               text: `✅ Draft published: ${recipe.title}`,
               json: { recipeId: recipe.id, title: recipe.title, recipe },

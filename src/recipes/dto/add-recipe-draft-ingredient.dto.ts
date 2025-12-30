@@ -56,6 +56,10 @@ class RecipeDraftIngredientInputDto {
   @IsOptional()
   @IsInt()
   order?: number | null;
+
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string | null;
 }
 
 export class AddRecipeDraftIngredientDto {
