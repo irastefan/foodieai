@@ -39,6 +39,7 @@ type JsonSchema = {
 };
 
 type ToolExample = { summary: string; arguments: Record<string, unknown> };
+type ToolRpcExample = { summary: string; request: Record<string, unknown> };
 
 type ToolDefinition = {
   name: string;
@@ -49,6 +50,7 @@ type ToolDefinition = {
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
   examples?: ToolExample[];
+  rpcExamples?: ToolRpcExample[];
   dtoClass?: new () => object;
   handler: (
     args: Record<string, unknown>,
@@ -90,6 +92,7 @@ export class McpService {
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       examples: tool.examples,
+      rpcExamples: tool.rpcExamples,
     }));
   }
 
@@ -347,6 +350,17 @@ export class McpService {
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         outputSchema: { type: "object" },
         examples: [{ summary: "Load capabilities", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "mcp.capabilities", arguments: {} },
+            },
+          },
+        ],
         handler: async (_args, context) => ({
           text: "✅ MCP capabilities",
           json: {
@@ -387,6 +401,17 @@ export class McpService {
         examples: [
           { summary: "General help", arguments: {} },
           { summary: "Recipe-focused", arguments: { topic: "recipes" } },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 2,
+              method: "tools/call",
+              params: { name: "mcp.help", arguments: { topic: "recipes" } },
+            },
+          },
         ],
         handler: async (args, context) => {
           const topic = typeof args.topic === "string" ? args.topic : "all";
@@ -446,6 +471,20 @@ export class McpService {
             arguments: { name: "Salmon", kcal100: 208, protein100: 20, fat100: 13, carbs100: 0 },
           },
         ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 10,
+              method: "tools/call",
+              params: {
+                name: "product.createManual",
+                arguments: { name: "Salmon", kcal100: 208, protein100: 20, fat100: 13, carbs100: 0 },
+              },
+            },
+          },
+        ],
         dtoClass: CreateProductDto,
         handler: async (args) => {
           const product = await this.createManual(args);
@@ -477,6 +516,17 @@ export class McpService {
           required: ["count", "items"],
         },
         examples: [{ summary: "Search yogurt", arguments: { query: "yogurt" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 11,
+              method: "tools/call",
+              params: { name: "product.search", arguments: { query: "yogurt" } },
+            },
+          },
+        ],
         handler: async (args, context) => {
           const results = await this.search(args);
           return {
@@ -496,6 +546,17 @@ export class McpService {
         inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
         outputSchema: { type: "object" },
         examples: [{ summary: "Current user", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 20,
+              method: "tools/call",
+              params: { name: "user.me", arguments: {} },
+            },
+          },
+        ],
         handler: async (_args, context) => {
           const data = await this.userMe(context.userId as string);
           return {
@@ -544,6 +605,27 @@ export class McpService {
             },
           },
         ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 21,
+              method: "tools/call",
+              params: {
+                name: "userProfile.upsert",
+                arguments: {
+                  firstName: "Ira",
+                  sex: "FEMALE",
+                  heightCm: 168,
+                  weightKg: 63,
+                  activityLevel: "MODERATE",
+                  goal: "LOSE",
+                },
+              },
+            },
+          },
+        ],
         dtoClass: UpsertUserProfileDto,
         handler: async (args, context) => {
           const profile = await this.upsertUserProfile(context.userId as string, args);
@@ -563,6 +645,17 @@ export class McpService {
         inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
         outputSchema: { type: "object" },
         examples: [{ summary: "Recalculate", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 22,
+              method: "tools/call",
+              params: { name: "userTargets.recalculate", arguments: {} },
+            },
+          },
+        ],
         handler: async (_args, context) => {
           const profile = await this.recalculateTargets(context.userId as string);
           return {
@@ -591,6 +684,17 @@ export class McpService {
         },
         outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
         examples: [{ summary: "Create draft", arguments: { title: "Omelette", category: "breakfast" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 30,
+              method: "tools/call",
+              params: { name: "recipeDraft.create", arguments: { title: "Omelette", category: "breakfast" } },
+            },
+          },
+        ],
         dtoClass: CreateRecipeDraftDto,
         handler: async (args) => {
           const draft = await this.recipeDraftsService.createDraft(
@@ -654,6 +758,23 @@ export class McpService {
             },
           },
         ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 31,
+              method: "tools/call",
+              params: {
+                name: "recipeDraft.addIngredient",
+                arguments: {
+                  draftId: "draft_123",
+                  ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+                },
+              },
+            },
+          },
+        ],
         dtoClass: AddRecipeDraftIngredientDto,
         handler: async (args) => {
           try {
@@ -685,6 +806,20 @@ export class McpService {
         },
         outputSchema: { type: "object" },
         examples: [{ summary: "Remove ingredient", arguments: { draftId: "draft_123", ingredientId: "ing_1" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 32,
+              method: "tools/call",
+              params: {
+                name: "recipeDraft.removeIngredient",
+                arguments: { draftId: "draft_123", ingredientId: "ing_1" },
+              },
+            },
+          },
+        ],
         dtoClass: RemoveRecipeDraftIngredientDto,
         handler: async (args) => {
           try {
@@ -724,6 +859,20 @@ export class McpService {
             arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook in pan", "Serve"] },
           },
         ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 33,
+              method: "tools/call",
+              params: {
+                name: "recipeDraft.setSteps",
+                arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook in pan", "Serve"] },
+              },
+            },
+          },
+        ],
         dtoClass: SetRecipeDraftStepsDto,
         handler: async (args) => {
           try {
@@ -755,6 +904,17 @@ export class McpService {
         },
         outputSchema: { type: "object" },
         examples: [{ summary: "Get draft", arguments: { draftId: "draft_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 34,
+              method: "tools/call",
+              params: { name: "recipeDraft.get", arguments: { draftId: "draft_123" } },
+            },
+          },
+        ],
         dtoClass: DraftIdDto,
         handler: async (args) => {
           try {
@@ -783,6 +943,17 @@ export class McpService {
         },
         outputSchema: { type: "object" },
         examples: [{ summary: "Validate draft", arguments: { draftId: "draft_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 35,
+              method: "tools/call",
+              params: { name: "recipeDraft.validate", arguments: { draftId: "draft_123" } },
+            },
+          },
+        ],
         dtoClass: DraftIdDto,
         handler: async (args) => {
           try {
@@ -814,6 +985,17 @@ export class McpService {
         },
         outputSchema: { type: "object", properties: { recipeId: { type: "string" } } },
         examples: [{ summary: "Publish draft", arguments: { draftId: "draft_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 36,
+              method: "tools/call",
+              params: { name: "recipeDraft.publish", arguments: { draftId: "draft_123" } },
+            },
+          },
+        ],
         dtoClass: DraftIdDto,
         handler: async (args) => {
           try {
@@ -872,6 +1054,20 @@ export class McpService {
         examples: [
           { summary: "Search breakfast", arguments: { query: "omelette", category: "breakfast", limit: 5 } },
         ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 40,
+              method: "tools/call",
+              params: {
+                name: "recipe.search",
+                arguments: { query: "omelette", category: "breakfast", limit: 5 },
+              },
+            },
+          },
+        ],
         dtoClass: SearchRecipesDto,
         handler: async (args) => {
           const recipes = await this.searchRecipes(args);
@@ -896,6 +1092,17 @@ export class McpService {
         },
         outputSchema: { type: "object" },
         examples: [{ summary: "Load recipe", arguments: { recipeId: "rec_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 41,
+              method: "tools/call",
+              params: { name: "recipe.get", arguments: { recipeId: "rec_123" } },
+            },
+          },
+        ],
         dtoClass: RecipeIdDto,
         handler: async (args) => {
           try {

@@ -71,6 +71,183 @@ export class McpController {
         params: {},
       },
     },
+    examples: {
+      toolsList: {
+        summary: "List all tools",
+        value: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+      },
+      capabilities: {
+        summary: "Capabilities catalog",
+        value: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "mcp.capabilities", arguments: {} },
+        },
+      },
+      helpRecipes: {
+        summary: "Help: recipes",
+        value: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "mcp.help", arguments: { topic: "recipes" } },
+        },
+      },
+      productSearch: {
+        summary: "Search products",
+        value: {
+          jsonrpc: "2.0",
+          id: 10,
+          method: "tools/call",
+          params: { name: "product.search", arguments: { query: "yogurt" } },
+        },
+      },
+      productCreate: {
+        summary: "Create product",
+        value: {
+          jsonrpc: "2.0",
+          id: 11,
+          method: "tools/call",
+          params: {
+            name: "product.createManual",
+            arguments: { name: "Salmon", kcal100: 208, protein100: 20, fat100: 13, carbs100: 0 },
+          },
+        },
+      },
+      userMe: {
+        summary: "Current user",
+        value: {
+          jsonrpc: "2.0",
+          id: 20,
+          method: "tools/call",
+          params: { name: "user.me", arguments: {} },
+        },
+      },
+      userProfileUpsert: {
+        summary: "Upsert profile",
+        value: {
+          jsonrpc: "2.0",
+          id: 21,
+          method: "tools/call",
+          params: {
+            name: "userProfile.upsert",
+            arguments: {
+              firstName: "Ira",
+              lastName: "Stefan",
+              sex: "FEMALE",
+              heightCm: 168,
+              weightKg: 63,
+            },
+          },
+        },
+      },
+      userTargetsRecalc: {
+        summary: "Recalculate targets",
+        value: {
+          jsonrpc: "2.0",
+          id: 22,
+          method: "tools/call",
+          params: { name: "userTargets.recalculate", arguments: {} },
+        },
+      },
+      recipeDraftCreate: {
+        summary: "Create draft",
+        value: {
+          jsonrpc: "2.0",
+          id: 30,
+          method: "tools/call",
+          params: { name: "recipeDraft.create", arguments: { title: "Omelette", category: "breakfast" } },
+        },
+      },
+      recipeDraftAddIngredient: {
+        summary: "Add ingredient",
+        value: {
+          jsonrpc: "2.0",
+          id: 31,
+          method: "tools/call",
+          params: {
+            name: "recipeDraft.addIngredient",
+            arguments: {
+              draftId: "draft_123",
+              ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+            },
+          },
+        },
+      },
+      recipeDraftRemoveIngredient: {
+        summary: "Remove ingredient",
+        value: {
+          jsonrpc: "2.0",
+          id: 32,
+          method: "tools/call",
+          params: {
+            name: "recipeDraft.removeIngredient",
+            arguments: { draftId: "draft_123", ingredientId: "ing_1" },
+          },
+        },
+      },
+      recipeDraftSetSteps: {
+        summary: "Set steps",
+        value: {
+          jsonrpc: "2.0",
+          id: 33,
+          method: "tools/call",
+          params: {
+            name: "recipeDraft.setSteps",
+            arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook", "Serve"] },
+          },
+        },
+      },
+      recipeDraftGet: {
+        summary: "Get draft",
+        value: {
+          jsonrpc: "2.0",
+          id: 34,
+          method: "tools/call",
+          params: { name: "recipeDraft.get", arguments: { draftId: "draft_123" } },
+        },
+      },
+      recipeDraftValidate: {
+        summary: "Validate draft",
+        value: {
+          jsonrpc: "2.0",
+          id: 35,
+          method: "tools/call",
+          params: { name: "recipeDraft.validate", arguments: { draftId: "draft_123" } },
+        },
+      },
+      recipeDraftPublish: {
+        summary: "Publish draft",
+        value: {
+          jsonrpc: "2.0",
+          id: 36,
+          method: "tools/call",
+          params: { name: "recipeDraft.publish", arguments: { draftId: "draft_123" } },
+        },
+      },
+      recipeSearch: {
+        summary: "Search recipes",
+        value: {
+          jsonrpc: "2.0",
+          id: 40,
+          method: "tools/call",
+          params: {
+            name: "recipe.search",
+            arguments: { query: "omelette", category: "breakfast", limit: 5 },
+          },
+        },
+      },
+      recipeGet: {
+        summary: "Get recipe",
+        value: {
+          jsonrpc: "2.0",
+          id: 41,
+          method: "tools/call",
+          params: { name: "recipe.get", arguments: { recipeId: "rec_123" } },
+        },
+      },
+    },
   })
   async handleMcp(
     @Headers() headers: Record<string, string | string[] | undefined>,
