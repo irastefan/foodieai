@@ -1,12 +1,12 @@
 import { randomUUID } from "crypto";
 
-export type McpContent =
-  | { type: "text"; text: string }
-  | { type: "json"; json: unknown };
+export type McpContent = { type: "text"; text: string };
 
 export type McpResult = {
   content: McpContent[];
   isError: false;
+  data?: unknown;
+  meta?: Record<string, unknown>;
 };
 
 export class McpHandledError extends Error {
@@ -31,12 +31,29 @@ export function buildMcpResult(
 ): McpResult {
   const content: McpContent[] = [{ type: "text", text }];
   if (json !== undefined) {
-    content.push({ type: "json", json });
+    content.push({
+      type: "text",
+      text: typeof json === "string" ? json : JSON.stringify(json, null, 2),
+    });
   }
   if (meta !== undefined) {
-    content.push({ type: "json", json: { _meta: meta } });
+    content.push({ type: "text", text: JSON.stringify({ _meta: meta }) });
   }
-  return { content, isError: false };
+  return { content, isError: false, data: json, meta };
+}
+
+export function buildMcpErrorResult(
+  message: string,
+  meta?: Record<string, unknown>,
+  data?: unknown,
+) {
+  const content: McpContent[] = [{ type: "text", text: message }];
+  return {
+    content,
+    isError: true as const,
+    ...(meta ? { meta } : {}),
+    ...(data ? { data } : {}),
+  };
 }
 
 export function newRequestId() {

@@ -11,7 +11,12 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request } from "express";
 import { AuthContextService } from "../auth/auth-context.service";
 import { McpService } from "./mcp.service";
-import { buildMcpResult, McpHandledError, newRequestId } from "./mcp.utils";
+import {
+  buildMcpErrorResult,
+  buildMcpResult,
+  McpHandledError,
+  newRequestId,
+} from "./mcp.utils";
 
 @ApiTags("mcp")
 @Controller("mcp")
@@ -336,21 +341,20 @@ export class McpController {
 
   private handleToolError(id: number | string | null, error: unknown, requestId: string) {
     if (error instanceof McpHandledError) {
-      if (error.message === "VALIDATION_ERROR" || error.message === "DRAFT_INCOMPLETE") {
-        console.warn(`[${requestId}] ${error.message}`, error.data);
-      }
-      return this.error(id, error.code, error.message, {
-        ...(error.data as Record<string, unknown> | undefined),
-        requestId,
-      });
+      const msg = error.message || "Error";
+      console.warn(`[${requestId}] ${msg}`, error.data);
+      const result = buildMcpErrorResult(msg, { requestId, code: error.code }, error.data);
+      return { jsonrpc: "2.0", id, result };
     }
 
     if (error instanceof UnauthorizedException) {
-      return this.error(id, 401, "AUTH_REQUIRED", { requestId });
+      const result = buildMcpErrorResult("AUTH_REQUIRED", { requestId, code: 401 });
+      return { jsonrpc: "2.0", id, result };
     }
 
     console.error(`[${requestId}] INTERNAL_ERROR`, error);
-    return this.error(id, -32000, "INTERNAL_ERROR", { requestId });
+    const result = buildMcpErrorResult("INTERNAL_ERROR", { requestId, code: -32000 });
+    return { jsonrpc: "2.0", id, result };
   }
 
   private isValidRequest(body: unknown): body is {
