@@ -543,6 +543,10 @@ export class RecipeDraftsService {
     };
   }
 
+  async recalcDraft(draftId: string) {
+    return this.prisma.$transaction((tx) => this.recalcDraftNutritionTx(tx, draftId));
+  }
+
   private buildPublishedDescription(
     description: string | null,
     hasSnapshotIngredient: boolean,

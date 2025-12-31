@@ -988,6 +988,41 @@ export class McpService {
           }
         },
       },
+      "recipeDraft.recalculate": {
+        name: "recipeDraft.recalculate",
+        description:
+          "Recalculate draft nutrition.\nUse to refresh totals after edits.\nReturns draft with nutritionTotal/perServing.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { draftId: { type: "string" } },
+          required: ["draftId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Recalculate draft", arguments: { draftId: "draft_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 37,
+              method: "tools/call",
+              params: { name: "recipeDraft.recalculate", arguments: { draftId: "draft_123" } },
+            },
+          },
+        ],
+        dtoClass: DraftIdDto,
+        handler: async (args) => {
+          const draft = await this.recipeDraftsService.recalcDraft(args.draftId as string);
+          return {
+            text: "✅ Draft recalculated",
+            json: { draftId: draft.id, draft },
+          };
+        },
+      },
       "recipeDraft.publish": {
         name: "recipeDraft.publish",
         description:

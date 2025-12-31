@@ -61,6 +61,7 @@ export class McpController {
             { name: "userTargets.recalculate", description: "Recalculate daily calorie and macro targets" },
             { name: "recipe.search", description: "Search recipes" },
             { name: "recipe.get", description: "Get a recipe by id" },
+            { name: "recipeDraft.recalculate", description: "Recalculate draft nutrition" },
           ],
         },
       },
@@ -229,6 +230,15 @@ export class McpController {
           id: 36,
           method: "tools/call",
           params: { name: "recipeDraft.publish", arguments: { draftId: "draft_123" } },
+        },
+      },
+      recipeDraftRecalculate: {
+        summary: "Recalculate draft nutrition",
+        value: {
+          jsonrpc: "2.0",
+          id: 37,
+          method: "tools/call",
+          params: { name: "recipeDraft.recalculate", arguments: { draftId: "draft_123" } },
         },
       },
       recipeSearch: {

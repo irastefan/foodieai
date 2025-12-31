@@ -146,6 +146,16 @@ export class RecipeDraftsController {
     return this.recipeDraftsService.validateDraft(params.draftId);
   }
 
+  @Post(":draftId/recalculate")
+  @ApiOperation({
+    summary: "Recalculate draft nutrition",
+    description: "Recalculates nutrition totals/perServing server-side for the draft.",
+  })
+  @ApiParam({ name: "draftId", example: "draft_123" })
+  async recalc(@Param() params: DraftIdDto) {
+    return this.recipeDraftsService.recalcDraft(params.draftId);
+  }
+
   @Post(":draftId/publish")
   @ApiOperation({
     summary: "Publish draft",
