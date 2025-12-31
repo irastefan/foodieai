@@ -1150,7 +1150,7 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { recipeId: { type: "string" } },
+          properties: { recipeId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
           required: ["recipeId"],
         },
         outputSchema: { type: "object" },
@@ -1204,7 +1204,10 @@ export class McpService {
               jsonrpc: "2.0",
               id: 50,
               method: "tools/call",
-              params: { name: "recipeDraft.fromRecipe", arguments: { recipeId: "rec_123" } },
+              params: {
+                name: "recipeDraft.fromRecipe",
+                arguments: { recipeId: "rec_123", clientRequestId: "req-clone-1" },
+              },
             },
           },
         ],

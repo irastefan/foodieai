@@ -248,7 +248,10 @@ export class McpController {
           jsonrpc: "2.0",
           id: 50,
           method: "tools/call",
-          params: { name: "recipeDraft.fromRecipe", arguments: { recipeId: "rec_123" } },
+          params: {
+            name: "recipeDraft.fromRecipe",
+            arguments: { recipeId: "rec_123", clientRequestId: "req-clone-1" },
+          },
         },
       },
       recipeSearch: {
