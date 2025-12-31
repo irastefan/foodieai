@@ -118,6 +118,9 @@ model RecipeDraft {
   ingredients RecipeDraftIngredient[]
   steps       RecipeDraftStep[]
 
+  nutritionTotal      Json?
+  nutritionPerServing Json?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -168,6 +171,9 @@ model Recipe {
   ingredients RecipeIngredient[]
   steps       RecipeStep[]
 
+  nutritionTotal      Json?
+  nutritionPerServing Json?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -191,6 +197,9 @@ model RecipeIngredient {
   fat100      Float?
   carbs100    Float?
   assumptions Json?
+
+  nutritionTotal      Json?
+  nutritionPerServing Json?
 }
 
 model RecipeStep {

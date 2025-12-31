@@ -72,7 +72,11 @@ export class RecipeDraftsController {
     },
   })
   async addIngredient(@Body() dto: AddRecipeDraftIngredientDto) {
-    return this.recipeDraftsService.addIngredient(dto.draftId, dto.ingredient);
+    return this.recipeDraftsService.addIngredient(
+      dto.draftId,
+      dto.ingredient,
+      dto.ingredient.clientRequestId,
+    );
   }
 
   @Delete("ingredients")
@@ -90,7 +94,11 @@ export class RecipeDraftsController {
     },
   })
   async removeIngredient(@Body() dto: RemoveRecipeDraftIngredientDto) {
-    return this.recipeDraftsService.removeIngredient(dto.draftId, dto.ingredientId);
+    return this.recipeDraftsService.removeIngredient(
+      dto.draftId,
+      dto.ingredientId,
+      dto.clientRequestId,
+    );
   }
 
   @Put("steps")
@@ -111,7 +119,11 @@ export class RecipeDraftsController {
     },
   })
   async setSteps(@Body() dto: SetRecipeDraftStepsDto) {
-    return this.recipeDraftsService.setSteps(dto.draftId, dto.steps);
+    return this.recipeDraftsService.setSteps(
+      dto.draftId,
+      dto.steps,
+      dto.clientRequestId,
+    );
   }
 
   @Get(":draftId")
