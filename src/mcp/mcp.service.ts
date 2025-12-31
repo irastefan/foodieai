@@ -370,13 +370,17 @@ export class McpService {
                 "recipeDraft.addIngredient",
                 "recipeDraft.setSteps",
                 "recipeDraft.validate",
+                "recipeDraft.recalculate",
                 "recipeDraft.publish",
+                "recipeDraft.fromRecipe",
               ],
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
             },
             flows: {
-              recipe: ["create -> addIngredient* -> setSteps -> validate -> publish"],
+              recipe: [
+                "create/fromRecipe -> addIngredient* -> setSteps -> recalc -> validate -> publish",
+              ],
             },
           },
           meta: { requestId: context.requestId },
@@ -420,7 +424,7 @@ export class McpService {
               ? "Products:\n- Search products: recipe asks for ingredients with nutrition, call product.search\n- Create manual: when user provides nutrition per 100g, call product.createManual"
               : topic === "auth"
                 ? "Auth:\n- user.me returns profile+targets\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates from profile"
-                : "Recipes:\nFlow: recipeDraft.create -> addIngredient* -> setSteps -> validate -> publish\nUse recipe.search/get for published recipes.";
+                : "Recipes:\nFlow: recipeDraft.create/fromRecipe -> addIngredient* -> setSteps -> recalc -> validate -> publish\nUse recipeDraft.recalculate to refresh nutrition, recipeDraft.fromRecipe to edit existing, recipe.search/get for published recipes.";
           const examples = {
             jsonrpc: "2.0",
             id: 1,
@@ -679,6 +683,8 @@ export class McpService {
             category: { type: ["string", "null"] },
             description: { type: ["string", "null"] },
             servings: { type: ["number", "null"] },
+            sourceRecipeId: { type: ["string", "null"] },
+            clientRequestId: { type: ["string", "null"] },
           },
           required: ["title"],
         },
@@ -696,10 +702,11 @@ export class McpService {
           },
         ],
         dtoClass: CreateRecipeDraftDto,
-        handler: async (args) => {
-          const draft = await this.recipeDraftsService.createDraft(
-            args as unknown as CreateRecipeDraftDto,
-          );
+        handler: async (args, context) => {
+          const draft = await this.recipeDraftsService.createDraft({
+            ...(args as Record<string, unknown>),
+            clientRequestId: (args as Record<string, unknown>).clientRequestId ?? context.requestId,
+          } as CreateRecipeDraftDto);
           return { text: "✅ Draft created", json: { draftId: draft.id, draft } };
         },
       },
@@ -1025,7 +1032,7 @@ export class McpService {
       },
       "recipeDraft.publish": {
         name: "recipeDraft.publish",
-        description:
+          description:
           "Publish draft into recipe.\nUse after validation passes.\nReturns recipeId.",
         tags: ["recipes", "drafts"],
         auth: "required",
@@ -1033,7 +1040,7 @@ export class McpService {
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { draftId: { type: "string" } },
+          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
           required: ["draftId"],
         },
         outputSchema: { type: "object", properties: { recipeId: { type: "string" } } },
@@ -1050,11 +1057,11 @@ export class McpService {
           },
         ],
         dtoClass: DraftIdDto,
-        handler: async (args) => {
+        handler: async (args, context) => {
           try {
             const recipe = await this.recipeDraftsService.publishDraft(
               args.draftId as string,
-              args.clientRequestId as string | null | undefined,
+              (args.clientRequestId as string | null | undefined) ?? context.requestId,
             );
             return {
               text: `✅ Draft published: ${recipe.title}`,

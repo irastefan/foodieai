@@ -19,4 +19,8 @@ export class CreateRecipeDraftDto {
   @IsOptional()
   @IsString()
   sourceRecipeId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string | null;
 }

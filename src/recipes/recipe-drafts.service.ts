@@ -87,9 +87,26 @@ export class RecipeDraftsService {
     description?: string | null;
     servings?: number | null;
     sourceRecipeId?: string | null;
+    clientRequestId?: string | null;
   }) {
+    const key = dto.clientRequestId ?? null;
     if (!dto.sourceRecipeId) {
-      return this.prisma.recipeDraft.create({
+      if (key) {
+        const existing = await (this.prisma as any).idempotencyKey?.findUnique({
+          where: {
+            operation_key_entityId: {
+              operation: "recipeDraft.create",
+              key,
+              entityId: dto.sourceRecipeId ?? "standalone",
+            },
+          },
+        });
+        if (existing?.result) {
+          return existing.result as RecipeDraft;
+        }
+      }
+
+      const created = await this.prisma.recipeDraft.create({
         data: {
           title: dto.title,
           category: dto.category ?? null,
@@ -101,6 +118,19 @@ export class RecipeDraftsService {
           steps: { orderBy: { order: "asc" } },
         },
       });
+
+      if (key && (this.prisma as any).idempotencyKey) {
+        await (this.prisma as any).idempotencyKey.create({
+          data: {
+            operation: "recipeDraft.create",
+            key,
+            entityId: dto.sourceRecipeId ?? "standalone",
+            result: created,
+          },
+        });
+      }
+
+      return created;
     }
 
     return this.getOrCreateFromRecipe(dto.sourceRecipeId);
@@ -322,7 +352,7 @@ export class RecipeDraftsService {
     const draft = await this.prisma.recipeDraft.findUnique({
       where: { id: draftId },
       include: {
-        ingredients: { orderBy: { order: "asc" } },
+        ingredients: { orderBy: { order: "asc" }, include: { product: true } },
         steps: { orderBy: { order: "asc" } },
       },
     });

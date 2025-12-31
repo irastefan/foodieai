@@ -16,7 +16,8 @@ export class RecipeDraftsController {
   @Post()
   @ApiOperation({
     summary: "Create draft",
-    description: "Creates a new recipe draft.",
+    description:
+      "Creates a new recipe draft. If sourceRecipeId is provided, clones the published recipe (ingredients/steps) into the draft. clientRequestId enables idempotent create.",
   })
   @ApiBody({
     type: CreateRecipeDraftDto,
@@ -24,6 +25,16 @@ export class RecipeDraftsController {
       simple: {
         summary: "Minimal draft",
         value: { title: "Omelette", category: "breakfast" },
+      },
+      clone: {
+        summary: "Clone from recipe",
+        value: {
+          title: "Tiramisu v2",
+          category: "dessert",
+          servings: 4,
+          sourceRecipeId: "rec_123",
+          clientRequestId: "req-create-1",
+        },
       },
     },
   })
@@ -162,6 +173,18 @@ export class RecipeDraftsController {
     description: "Publishes draft into a recipe (throws if incomplete).",
   })
   @ApiParam({ name: "draftId", example: "draft_123" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { clientRequestId: { type: "string", nullable: true } },
+    },
+    examples: {
+      publish: {
+        summary: "Publish with idempotency key",
+        value: { clientRequestId: "req-publish-1" },
+      },
+    },
+  })
   async publishDraft(@Param() params: DraftIdDto) {
     return this.recipeDraftsService.publishDraft(params.draftId);
   }
