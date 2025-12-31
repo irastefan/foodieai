@@ -763,6 +763,21 @@ export class McpService {
                 amount: 120,
                 unit: "g",
                 macrosPer100: { kcal100: 18, protein100: 0.9, fat100: 0.2, carbs100: 3.9 },
+                clientRequestId: "req-ing-1",
+              },
+            },
+          },
+          {
+            summary: "Add product-linked ingredient with nutrition",
+            arguments: {
+              draftId: "draft_123",
+              ingredient: {
+                name: "Egg",
+                amount: 2,
+                unit: "pcs",
+                productId: "prod_123",
+                macrosPer100: { kcal100: 155, protein100: 13, fat100: 11, carbs100: 1.1 },
+                clientRequestId: "req-ing-2",
               },
             },
           },
