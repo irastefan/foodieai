@@ -1175,6 +1175,41 @@ export class McpService {
           }
         },
       },
+      "recipeDraft.fromRecipe": {
+        name: "recipeDraft.fromRecipe",
+        description:
+          "Get or create draft from published recipe.\nUse to edit existing recipe.\nReturns draftId and draft.",
+        tags: ["recipes", "drafts"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { recipeId: { type: "string" } },
+          required: ["recipeId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Clone recipe", arguments: { recipeId: "rec_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 50,
+              method: "tools/call",
+              params: { name: "recipeDraft.fromRecipe", arguments: { recipeId: "rec_123" } },
+            },
+          },
+        ],
+        dtoClass: RecipeIdDto,
+        handler: async (args) => {
+          const draft = await this.recipeDraftsService.getOrCreateFromRecipe(args.recipeId as string);
+          return {
+            text: "✅ Draft ready from recipe",
+            json: { draftId: draft.id, draft },
+          };
+        },
+      },
     };
   }
 

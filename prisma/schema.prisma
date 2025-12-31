@@ -114,9 +114,11 @@ model RecipeDraft {
   description String?
   servings    Int?
   status      RecipeStatus @default(DRAFT)
+  sourceRecipeId String?
 
   ingredients RecipeDraftIngredient[]
   steps       RecipeDraftStep[]
+  sourceRecipe Recipe? @relation("RecipeDraftSource", fields: [sourceRecipeId], references: [id])
 
   nutritionTotal      Json?
   nutritionPerServing Json?

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Recipe, RecipeDraft, RecipeDraftIngredient, RecipeDraftStep } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { DraftIncompleteError, RecipeDraftNotFoundError } from "./recipes.errors";
+import { DraftIncompleteError, RecipeDraftNotFoundError, RecipeNotFoundError } from "./recipes.errors";
 
 const SNAPSHOT_WARNING =
   "⚠️ Некоторые ингредиенты содержат оценочные данные (snapshot).";
@@ -545,6 +545,74 @@ export class RecipeDraftsService {
 
   async recalcDraft(draftId: string) {
     return this.prisma.$transaction((tx) => this.recalcDraftNutritionTx(tx, draftId));
+  }
+
+  async getOrCreateFromRecipe(recipeId: string) {
+    return this.prisma.$transaction(async (prisma) => {
+      const recipe = await prisma.recipe.findUnique({
+        where: { id: recipeId },
+        include: {
+          ingredients: { orderBy: { order: "asc" } },
+          steps: { orderBy: { order: "asc" } },
+        },
+      });
+      if (!recipe) {
+        throw new RecipeNotFoundError();
+      }
+
+      const existing = await (prisma as any).recipeDraft.findFirst({
+        where: { sourceRecipeId: recipeId, status: "DRAFT" } as any,
+        include: {
+          ingredients: { orderBy: { order: "asc" } },
+          steps: { orderBy: { order: "asc" } },
+        },
+      });
+      if (existing) {
+        return existing as DraftWithRelations;
+      }
+
+      const draft = await (prisma as any).recipeDraft.create({
+        data: {
+          title: recipe.title,
+          category: recipe.category,
+          description: recipe.description,
+          servings: recipe.servings,
+          status: "DRAFT",
+          sourceRecipeId: recipe.id,
+        } as any,
+      });
+
+      if (recipe.ingredients.length > 0) {
+        await (prisma as any).recipeDraftIngredient.createMany({
+          data: recipe.ingredients.map((ing) => ({
+            draftId: draft.id,
+            order: ing.order ?? 0,
+            originalText: ing.originalText ?? null,
+            name: ing.name,
+            amount: ing.amount ?? null,
+            unit: ing.unit ?? null,
+            productId: ing.productId ?? null,
+            kcal100: ing.kcal100 ?? null,
+            protein100: ing.protein100 ?? null,
+            fat100: ing.fat100 ?? null,
+            carbs100: ing.carbs100 ?? null,
+            assumptions: ing.assumptions ?? null,
+          })) as any,
+        });
+      }
+
+      if (recipe.steps.length > 0) {
+        await (prisma as any).recipeDraftStep.createMany({
+          data: recipe.steps.map((step) => ({
+            draftId: draft.id,
+            order: step.order,
+            text: step.text,
+          })) as any,
+        });
+      }
+
+      return this.recalcDraftNutritionTx(prisma, draft.id);
+    });
   }
 
   private buildPublishedDescription(

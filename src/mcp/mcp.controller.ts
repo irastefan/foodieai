@@ -62,6 +62,7 @@ export class McpController {
             { name: "recipe.search", description: "Search recipes" },
             { name: "recipe.get", description: "Get a recipe by id" },
             { name: "recipeDraft.recalculate", description: "Recalculate draft nutrition" },
+            { name: "recipeDraft.fromRecipe", description: "Get or create draft from recipe" },
           ],
         },
       },
@@ -239,6 +240,15 @@ export class McpController {
           id: 37,
           method: "tools/call",
           params: { name: "recipeDraft.recalculate", arguments: { draftId: "draft_123" } },
+        },
+      },
+      recipeDraftFromRecipe: {
+        summary: "Clone or get draft from recipe",
+        value: {
+          jsonrpc: "2.0",
+          id: 50,
+          method: "tools/call",
+          params: { name: "recipeDraft.fromRecipe", arguments: { recipeId: "rec_123" } },
         },
       },
       recipeSearch: {
