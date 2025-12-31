@@ -172,6 +172,7 @@ model Recipe {
 
   ingredients RecipeIngredient[]
   steps       RecipeStep[]
+  drafts      RecipeDraft[] @relation("RecipeDraftSource")
 
   nutritionTotal      Json?
   nutritionPerServing Json?
