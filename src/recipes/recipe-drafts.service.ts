@@ -86,19 +86,24 @@ export class RecipeDraftsService {
     category?: string | null;
     description?: string | null;
     servings?: number | null;
+    sourceRecipeId?: string | null;
   }) {
-    return this.prisma.recipeDraft.create({
-      data: {
-        title: dto.title,
-        category: dto.category ?? null,
-        description: dto.description ?? null,
-        servings: dto.servings ?? null,
-      },
-      include: {
-        ingredients: { orderBy: { order: "asc" } },
-        steps: { orderBy: { order: "asc" } },
-      },
-    });
+    if (!dto.sourceRecipeId) {
+      return this.prisma.recipeDraft.create({
+        data: {
+          title: dto.title,
+          category: dto.category ?? null,
+          description: dto.description ?? null,
+          servings: dto.servings ?? null,
+        },
+        include: {
+          ingredients: { orderBy: { order: "asc" } },
+          steps: { orderBy: { order: "asc" } },
+        },
+      });
+    }
+
+    return this.getOrCreateFromRecipe(dto.sourceRecipeId);
   }
 
   async addIngredient(
@@ -596,7 +601,7 @@ export class RecipeDraftsService {
             protein100: ing.protein100 ?? null,
             fat100: ing.fat100 ?? null,
             carbs100: ing.carbs100 ?? null,
-            assumptions: ing.assumptions ?? null,
+            assumptions: ing.assumptions ?? Prisma.JsonNull,
           })) as any,
         });
       }

@@ -15,4 +15,8 @@ export class CreateRecipeDraftDto {
   @IsOptional()
   @IsInt()
   servings?: number | null;
+
+  @IsOptional()
+  @IsString()
+  sourceRecipeId?: string | null;
 }
