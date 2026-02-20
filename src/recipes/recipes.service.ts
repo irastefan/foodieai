@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
+import { UpdateRecipeDto } from "./dto/update-recipe.dto";
 
 @Injectable()
 export class RecipesService {
@@ -137,6 +138,167 @@ export class RecipesService {
     }
 
     return recipe;
+  }
+
+  async update(recipeId: string, dto: UpdateRecipeDto) {
+    const existing = await this.prisma.recipe.findUnique({
+      where: { id: recipeId },
+      include: {
+        ingredients: { include: { product: true }, orderBy: { order: "asc" } },
+        steps: { orderBy: { order: "asc" } },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        code: "RECIPE_NOT_FOUND",
+        message: "Recipe not found",
+        recipeId,
+      });
+    }
+
+    const ingredientsInput = dto.ingredients ?? null;
+    if (ingredientsInput && ingredientsInput.length === 0) {
+      throw new BadRequestException("ingredients must not be empty");
+    }
+
+    let ingredientRows: Array<{
+      order: number;
+      name: string;
+      amount: number | null;
+      unit: string | null;
+      productId: string | null;
+      kcal100: number | null;
+      protein100: number | null;
+      fat100: number | null;
+      carbs100: number | null;
+    }> = [];
+
+    if (ingredientsInput) {
+      const productIds = [...new Set(ingredientsInput.map((ingredient) => ingredient.productId))];
+      const products = await this.prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: {
+          id: true,
+          name: true,
+          kcal100: true,
+          protein100: true,
+          fat100: true,
+          carbs100: true,
+        },
+      });
+      const productById = new Map(products.map((product) => [product.id, product]));
+      const missingProductIds = productIds.filter((id) => !productById.has(id));
+      if (missingProductIds.length > 0) {
+        throw new NotFoundException({
+          code: "PRODUCT_NOT_FOUND",
+          message: "Some products were not found",
+          productIds: missingProductIds,
+        });
+      }
+
+      ingredientRows = ingredientsInput.map((ingredient, index) => {
+        const product = productById.get(ingredient.productId)!;
+        return {
+          order: index + 1,
+          name: ingredient.name?.trim() || product.name,
+          amount: ingredient.amount,
+          unit: ingredient.unit,
+          productId: ingredient.productId,
+          kcal100: product.kcal100,
+          protein100: product.protein100,
+          fat100: product.fat100,
+          carbs100: product.carbs100,
+        };
+      });
+    } else {
+      ingredientRows = existing.ingredients.map((ingredient) => ({
+        order: ingredient.order ?? 1,
+        name: ingredient.name,
+        amount: ingredient.amount,
+        unit: ingredient.unit,
+        productId: ingredient.productId,
+        kcal100: ingredient.kcal100 ?? ingredient.product?.kcal100 ?? null,
+        protein100: ingredient.protein100 ?? ingredient.product?.protein100 ?? null,
+        fat100: ingredient.fat100 ?? ingredient.product?.fat100 ?? null,
+        carbs100: ingredient.carbs100 ?? ingredient.product?.carbs100 ?? null,
+      }));
+    }
+
+    const nutrition = this.calculateNutritionTotals(
+      ingredientRows
+        .filter((row) => row.amount != null && row.unit != null)
+        .map((row) => ({
+          amount: row.amount as number,
+          unit: row.unit as string,
+          kcal100: row.kcal100 ?? 0,
+          protein100: row.protein100 ?? 0,
+          fat100: row.fat100 ?? 0,
+          carbs100: row.carbs100 ?? 0,
+        })),
+      dto.servings ?? existing.servings,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recipe.update({
+        where: { id: recipeId },
+        data: {
+          title: dto.title ?? undefined,
+          category: dto.category === undefined ? undefined : dto.category,
+          description: dto.description === undefined ? undefined : dto.description,
+          servings: dto.servings === undefined ? undefined : dto.servings,
+          nutritionTotal: nutrition.total as any,
+          nutritionPerServing: nutrition.perServing as any,
+        } as any,
+      });
+
+      if (ingredientsInput) {
+        await tx.recipeIngredient.deleteMany({ where: { recipeId } });
+        if (ingredientRows.length > 0) {
+          await tx.recipeIngredient.createMany({
+            data: ingredientRows.map((ingredient) => ({
+              recipeId,
+              order: ingredient.order,
+              name: ingredient.name,
+              amount: ingredient.amount,
+              unit: ingredient.unit,
+              productId: ingredient.productId,
+              kcal100: ingredient.kcal100,
+              protein100: ingredient.protein100,
+              fat100: ingredient.fat100,
+              carbs100: ingredient.carbs100,
+            })),
+          });
+        }
+      }
+
+      if (dto.steps) {
+        await tx.recipeStep.deleteMany({ where: { recipeId } });
+        if (dto.steps.length > 0) {
+          await tx.recipeStep.createMany({
+            data: dto.steps.map((text, index) => ({
+              recipeId,
+              order: index + 1,
+              text,
+            })),
+          });
+        }
+      }
+    });
+
+    return this.get(recipeId);
+  }
+
+  async remove(recipeId: string) {
+    const existing = await this.prisma.recipe.findUnique({ where: { id: recipeId }, select: { id: true } });
+    if (!existing) {
+      throw new NotFoundException({
+        code: "RECIPE_NOT_FOUND",
+        message: "Recipe not found",
+        recipeId,
+      });
+    }
+    await this.prisma.recipe.delete({ where: { id: recipeId } });
+    return { deleted: true, recipeId };
   }
 
   private calculateNutritionTotals(

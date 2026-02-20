@@ -31,7 +31,7 @@ export class UsersController {
     description: "Creates or updates profile and recalculates targets if possible.",
   })
   @ApiBody({
-    schema: { type: "object" },
+    type: UpsertUserProfileDto,
     examples: {
       fullProfile: {
         summary: "Full profile",
@@ -62,6 +62,15 @@ export class UsersController {
   @ApiOperation({
     summary: "Recalculate targets",
     description: "Recalculates targets if required fields are present.",
+  })
+  @ApiBody({
+    schema: { type: "object", additionalProperties: false },
+    examples: {
+      empty: {
+        summary: "No payload",
+        value: {},
+      },
+    },
   })
   async recalculateTargets(
     @Headers() headers: Record<string, string | string[] | undefined>,

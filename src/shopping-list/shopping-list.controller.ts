@@ -3,8 +3,10 @@ import { ApiBody, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { AddShoppingCategoryDto } from "./dto/add-shopping-category.dto";
 import { AddShoppingItemDto, SetShoppingItemStateDto } from "./dto/add-shopping-item.dto";
+import { ShoppingCategoryIdDto } from "./dto/category-id.dto";
 import { ShoppingItemIdDto } from "./dto/item-id.dto";
 import { ShoppingListService } from "./shopping-list.service";
+import { UpdateShoppingCategoryDto } from "./dto/update-shopping-category.dto";
 
 @ApiTags("shopping-list")
 @Controller("v1/shopping-list")
@@ -30,6 +32,15 @@ export class ShoppingListController {
 
   @Post("categories")
   @ApiOperation({ summary: "Add category" })
+  @ApiBody({
+    type: AddShoppingCategoryDto,
+    examples: {
+      create: {
+        summary: "Create category",
+        value: { name: "Dairy" },
+      },
+    },
+  })
   async addCategory(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() dto: AddShoppingCategoryDto,
@@ -38,17 +49,55 @@ export class ShoppingListController {
     return this.shoppingListService.addCategory(userId, dto);
   }
 
+  @Patch("categories/:categoryId")
+  @ApiOperation({ summary: "Update category" })
+  @ApiParam({ name: "categoryId", example: "cat_123" })
+  @ApiBody({
+    type: UpdateShoppingCategoryDto,
+    examples: {
+      update: {
+        summary: "Rename category",
+        value: { name: "Vegetables" },
+      },
+    },
+  })
+  async updateCategory(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: ShoppingCategoryIdDto,
+    @Body() dto: UpdateShoppingCategoryDto,
+  ) {
+    const userId = await this.resolveUserId(headers);
+    return this.shoppingListService.updateCategory(userId, params.categoryId, dto);
+  }
+
+  @Delete("categories/:categoryId")
+  @ApiOperation({ summary: "Remove category" })
+  @ApiParam({ name: "categoryId", example: "cat_123" })
+  async removeCategory(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: ShoppingCategoryIdDto,
+  ) {
+    const userId = await this.resolveUserId(headers);
+    return this.shoppingListService.removeCategory(userId, params.categoryId);
+  }
+
   @Post("items")
-  @ApiOperation({ summary: "Add shopping item" })
+  @ApiOperation({
+    summary: "Add shopping item",
+    description:
+      "Adds an item to shopping list: either from products catalog (productId) or as free-text item (customName).",
+  })
   @ApiBody({
     type: AddShoppingItemDto,
     examples: {
       product: {
         summary: "From product",
+        description: "Use existing product from products catalog",
         value: { productId: "prod_123", amount: 2, unit: "pcs", categoryName: "Dairy" },
       },
       custom: {
-        summary: "Free text",
+        summary: "Not from products (free text)",
+        description: "Use customName when item does not exist in products catalog",
         value: { customName: "Paper towels", amount: 1, unit: "pack", categoryName: "Home" },
       },
     },
@@ -64,6 +113,19 @@ export class ShoppingListController {
   @Patch("items/:itemId")
   @ApiOperation({ summary: "Set item state" })
   @ApiParam({ name: "itemId", example: "item_123" })
+  @ApiBody({
+    type: SetShoppingItemStateDto,
+    examples: {
+      done: {
+        summary: "Mark as done",
+        value: { isDone: true },
+      },
+      undone: {
+        summary: "Mark as not done",
+        value: { isDone: false },
+      },
+    },
+  })
   async setItemState(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingItemIdDto,

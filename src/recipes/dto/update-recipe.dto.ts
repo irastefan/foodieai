@@ -1,9 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsArray, IsInt, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 
-class CreateRecipeIngredientDto {
-  @ApiProperty({ example: "prod_egg" })
+class UpdateRecipeIngredientDto {
+  @ApiPropertyOptional({ example: "prod_egg" })
   @IsString()
   productId!: string;
 
@@ -12,26 +12,27 @@ class CreateRecipeIngredientDto {
   @IsString()
   name?: string | null;
 
-  @ApiProperty({ example: 120 })
+  @ApiPropertyOptional({ example: 120 })
   @IsNumber()
   amount!: number;
 
-  @ApiProperty({ example: "g" })
+  @ApiPropertyOptional({ example: "g" })
   @IsString()
   unit!: string;
 }
 
-export class CreateRecipeDto {
-  @ApiProperty({ example: "Omelette" })
+export class UpdateRecipeDto {
+  @ApiPropertyOptional({ example: "Omelette with herbs" })
+  @IsOptional()
   @IsString()
-  title!: string;
+  title?: string;
 
   @ApiPropertyOptional({ example: "breakfast" })
   @IsOptional()
   @IsString()
   category?: string | null;
 
-  @ApiPropertyOptional({ example: "Quick omelette" })
+  @ApiPropertyOptional({ example: "Updated description" })
   @IsOptional()
   @IsString()
   description?: string | null;
@@ -41,14 +42,16 @@ export class CreateRecipeDto {
   @IsInt()
   servings?: number | null;
 
-  @ApiProperty({ type: [CreateRecipeIngredientDto] })
+  @ApiPropertyOptional({ type: [UpdateRecipeIngredientDto] })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateRecipeIngredientDto)
-  ingredients!: CreateRecipeIngredientDto[];
+  @Type(() => UpdateRecipeIngredientDto)
+  ingredients?: UpdateRecipeIngredientDto[];
 
-  @ApiProperty({ example: ["Beat eggs", "Cook on pan", "Serve"] })
+  @ApiPropertyOptional({ example: ["Beat eggs", "Cook", "Serve"] })
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  steps!: string[];
+  steps?: string[];
 }

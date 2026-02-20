@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AddShoppingCategoryDto } from "./dto/add-shopping-category.dto";
 import { AddShoppingItemDto } from "./dto/add-shopping-item.dto";
+import { UpdateShoppingCategoryDto } from "./dto/update-shopping-category.dto";
 
 @Injectable()
 export class ShoppingListService {
@@ -77,6 +78,64 @@ export class ShoppingListService {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });
+  }
+
+  async updateCategory(userId: string, categoryId: string, dto: UpdateShoppingCategoryDto) {
+    const existing = await (this.prisma as any).shoppingCategory.findFirst({
+      where: { id: categoryId, ownerUserId: userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        code: "SHOPPING_CATEGORY_NOT_FOUND",
+        message: "Category not found",
+        categoryId,
+      });
+    }
+
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException("category name must not be empty");
+    }
+    const normalizedName = this.normalizeName(name);
+
+    const conflict = await (this.prisma as any).shoppingCategory.findFirst({
+      where: {
+        ownerUserId: userId,
+        normalizedName,
+        id: { not: categoryId },
+      },
+      select: { id: true },
+    });
+    if (conflict) {
+      throw new BadRequestException("category with this name already exists");
+    }
+
+    return (this.prisma as any).shoppingCategory.update({
+      where: { id: categoryId },
+      data: { name, normalizedName },
+      select: { id: true, name: true },
+    });
+  }
+
+  async removeCategory(userId: string, categoryId: string) {
+    const existing = await (this.prisma as any).shoppingCategory.findFirst({
+      where: { id: categoryId, ownerUserId: userId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        code: "SHOPPING_CATEGORY_NOT_FOUND",
+        message: "Category not found",
+        categoryId,
+      });
+    }
+
+    await (this.prisma as any).shoppingCategory.delete({
+      where: { id: categoryId },
+    });
+
+    return this.listCategories(userId);
   }
 
   async addItem(userId: string, dto: AddShoppingItemDto) {

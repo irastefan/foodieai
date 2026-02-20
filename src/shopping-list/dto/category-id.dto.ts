@@ -1,8 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
-export class ShoppingItemIdDto {
-  @ApiProperty({ example: "item_123" })
+export class ShoppingCategoryIdDto {
+  @ApiProperty({ example: "cat_123" })
   @IsString()
-  itemId!: string;
+  categoryId!: string;
 }
