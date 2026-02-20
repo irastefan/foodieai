@@ -12,6 +12,10 @@ import { CreateRecipeDto } from "../recipes/dto/create-recipe.dto";
 import { RecipeIdDto } from "../recipes/dto/recipe-id.dto";
 import { SearchRecipesDto } from "../recipes/dto/search-recipes.dto";
 import { RecipesService } from "../recipes/recipes.service";
+import { AddShoppingCategoryDto } from "../shopping-list/dto/add-shopping-category.dto";
+import { AddShoppingItemDto, SetShoppingItemStateDto } from "../shopping-list/dto/add-shopping-item.dto";
+import { ShoppingItemIdDto } from "../shopping-list/dto/item-id.dto";
+import { ShoppingListService } from "../shopping-list/shopping-list.service";
 import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
 import { UsersService } from "../users/users.service";
 import { throwMcpError } from "./mcp.utils";
@@ -62,6 +66,7 @@ export class McpService {
     private readonly productsService: ProductsService,
     private readonly recipesService: RecipesService,
     private readonly mealPlansService: MealPlansService,
+    private readonly shoppingListService: ShoppingListService,
     private readonly usersService: UsersService,
   ) {
     this.toolRegistry = this.buildToolRegistry();
@@ -262,6 +267,17 @@ export class McpService {
         args.unit = args.unit.trim().toLowerCase();
       }
     }
+    if (name === "shoppingList.addItem") {
+      if (typeof args.unit === "string") {
+        args.unit = args.unit.trim().toLowerCase();
+      }
+      if (typeof args.categoryName === "string") {
+        args.categoryName = args.categoryName.trim();
+      }
+      if (typeof args.customName === "string") {
+        args.customName = args.customName.trim();
+      }
+    }
     return args;
   }
 
@@ -361,10 +377,18 @@ export class McpService {
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
               planMeals: ["mealPlan.dayGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
+              shopping: [
+                "shoppingList.get",
+                "shoppingList.addCategory",
+                "shoppingList.addItem",
+                "shoppingList.setItemState",
+                "shoppingList.removeItem",
+              ],
             },
             flows: {
               recipe: ["create -> get"],
               mealPlan: ["dayGet -> addEntry* -> dayGet"],
+              shoppingList: ["addCategory* -> addItem* -> setItemState/removeItem"],
             },
           },
           meta: { requestId: context.requestId },
@@ -383,7 +407,7 @@ export class McpService {
           properties: {
             topic: {
               type: ["string", "null"],
-              enum: ["recipes", "products", "users", "meal-plans", "all", null],
+              enum: ["recipes", "products", "users", "meal-plans", "shopping-list", "all", null],
             },
           },
           required: [],
@@ -411,6 +435,8 @@ export class McpService {
               ? "Products:\n- Search products before recipe creation: product.search\n- Add manual product with macros: product.createManual"
               : topic === "meal-plans"
                 ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
+              : topic === "shopping-list"
+                ? "Shopping list:\n- Read list: shoppingList.get\n- Add category: shoppingList.addCategory\n- Add item (productId or customName): shoppingList.addItem"
               : topic === "users"
                 ? "Users:\n- user.me returns profile\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates targets"
                 : "Recipes:\n- Create in one call with product-linked ingredients: recipe.create\n- Then use recipe.search / recipe.get.";
@@ -792,6 +818,145 @@ export class McpService {
           };
         },
       },
+      "shoppingList.get": {
+        name: "shoppingList.get",
+        description:
+          "Get current shopping list.\nUse to show items and categories.\nReturns shopping list object.",
+        tags: ["shopping-list"],
+        auth: "required",
+        public: false,
+        inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Get list", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 60,
+              method: "tools/call",
+              params: { name: "shoppingList.get", arguments: {} },
+            },
+          },
+        ],
+        handler: async (_args, context) => {
+          const list = await this.getShoppingList(context.userId as string);
+          return {
+            text: "✅ Shopping list loaded",
+            json: list,
+          };
+        },
+      },
+      "shoppingList.addCategory": {
+        name: "shoppingList.addCategory",
+        description:
+          "Add shopping category.\nUse to create category like Dairy, Fruits.\nReturns category.",
+        tags: ["shopping-list"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Add category", arguments: { name: "Dairy" } }],
+        dtoClass: AddShoppingCategoryDto,
+        handler: async (args, context) => {
+          const category = await this.addShoppingCategory(context.userId as string, args);
+          return {
+            text: "✅ Category added",
+            json: category,
+          };
+        },
+      },
+      "shoppingList.addItem": {
+        name: "shoppingList.addItem",
+        description:
+          "Add shopping item by productId or free text.\nUse with optional categoryId/categoryName.\nReturns updated shopping list.",
+        tags: ["shopping-list"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            productId: { type: ["string", "null"] },
+            customName: { type: ["string", "null"] },
+            amount: { type: ["number", "null"] },
+            unit: { type: ["string", "null"] },
+            note: { type: ["string", "null"] },
+            categoryId: { type: ["string", "null"] },
+            categoryName: { type: ["string", "null"] },
+          },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          { summary: "Add product item", arguments: { productId: "prod_123", amount: 2, unit: "pcs" } },
+          { summary: "Add free text item", arguments: { customName: "Paper towels", categoryName: "Home" } },
+        ],
+        dtoClass: AddShoppingItemDto,
+        handler: async (args, context) => {
+          const list = await this.addShoppingItem(context.userId as string, args);
+          return {
+            text: "✅ Item added",
+            json: list,
+          };
+        },
+      },
+      "shoppingList.setItemState": {
+        name: "shoppingList.setItemState",
+        description:
+          "Set shopping item done/undone.\nUse when user marks checkbox.\nReturns updated shopping list.",
+        tags: ["shopping-list"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            itemId: { type: "string" },
+            isDone: { type: "boolean" },
+          },
+          required: ["itemId", "isDone"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Mark as done", arguments: { itemId: "item_123", isDone: true } }],
+        dtoClass: SetShoppingItemStateDto,
+        handler: async (args, context) => {
+          const list = await this.setShoppingItemState(context.userId as string, args);
+          return {
+            text: "✅ Item state updated",
+            json: list,
+          };
+        },
+      },
+      "shoppingList.removeItem": {
+        name: "shoppingList.removeItem",
+        description:
+          "Remove shopping item.\nUse when user deletes an item.\nReturns updated shopping list.",
+        tags: ["shopping-list"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { itemId: { type: "string" } },
+          required: ["itemId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Remove item", arguments: { itemId: "item_123" } }],
+        dtoClass: ShoppingItemIdDto,
+        handler: async (args, context) => {
+          const list = await this.removeShoppingItem(context.userId as string, args);
+          return {
+            text: "✅ Item removed",
+            json: list,
+          };
+        },
+      },
       "recipe.create": {
         name: "recipe.create",
         description:
@@ -1003,6 +1168,31 @@ export class McpService {
   async removeMealPlanEntry(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateDto(RemoveMealPlanEntryDto, args);
     return this.mealPlansService.removeEntry(userId, dto.entryId);
+  }
+
+  async getShoppingList(userId: string) {
+    return this.shoppingListService.getList(userId);
+  }
+
+  async addShoppingCategory(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(AddShoppingCategoryDto, args);
+    return this.shoppingListService.addCategory(userId, dto);
+  }
+
+  async addShoppingItem(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(AddShoppingItemDto, args);
+    return this.shoppingListService.addItem(userId, dto);
+  }
+
+  async setShoppingItemState(userId: string, args: Record<string, unknown>) {
+    const itemDto = await this.validateDto(ShoppingItemIdDto, args);
+    const stateDto = await this.validateDto(SetShoppingItemStateDto, args);
+    return this.shoppingListService.setItemState(userId, itemDto.itemId, stateDto.isDone);
+  }
+
+  async removeShoppingItem(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(ShoppingItemIdDto, args);
+    return this.shoppingListService.removeItem(userId, dto.itemId);
   }
 
   async createRecipe(args: Record<string, unknown>) {

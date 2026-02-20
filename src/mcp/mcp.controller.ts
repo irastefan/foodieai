@@ -60,6 +60,11 @@ export class McpController {
             { name: "mealPlan.dayGet", description: "Get day meal plan" },
             { name: "mealPlan.addEntry", description: "Add product or recipe to meal plan slot" },
             { name: "mealPlan.removeEntry", description: "Remove meal plan entry" },
+            { name: "shoppingList.get", description: "Get shopping list" },
+            { name: "shoppingList.addCategory", description: "Add shopping category" },
+            { name: "shoppingList.addItem", description: "Add shopping item" },
+            { name: "shoppingList.setItemState", description: "Set shopping item done/undone" },
+            { name: "shoppingList.removeItem", description: "Remove shopping item" },
           ],
         },
       },
@@ -144,6 +149,18 @@ export class McpController {
           params: {
             name: "mealPlan.addEntry",
             arguments: { slot: "BREAKFAST", productId: "prod_123", amount: 150, unit: "g" },
+          },
+        },
+      },
+      shoppingListAddItem: {
+        summary: "Add shopping item",
+        value: {
+          jsonrpc: "2.0",
+          id: 61,
+          method: "tools/call",
+          params: {
+            name: "shoppingList.addItem",
+            arguments: { customName: "Paper towels", categoryName: "Home" },
           },
         },
       },

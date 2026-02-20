@@ -35,6 +35,12 @@ Create `.env` from `.env.example`.
 - `GET /v1/meal-plans/day?date=YYYY-MM-DD`
 - `POST /v1/meal-plans/day/entries`
 - `DELETE /v1/meal-plans/day/entries/:entryId`
+- `GET /v1/shopping-list`
+- `GET /v1/shopping-list/categories`
+- `POST /v1/shopping-list/categories`
+- `POST /v1/shopping-list/items`
+- `PATCH /v1/shopping-list/items/:itemId`
+- `DELETE /v1/shopping-list/items/:itemId`
 
 Recipe creation is one request only:
 - single-step creation
@@ -54,6 +60,11 @@ Main tools:
 - `mealPlan.dayGet`
 - `mealPlan.addEntry`
 - `mealPlan.removeEntry`
+- `shoppingList.get`
+- `shoppingList.addCategory`
+- `shoppingList.addItem`
+- `shoppingList.setItemState`
+- `shoppingList.removeItem`
 
 ### Example: create recipe
 ```bash

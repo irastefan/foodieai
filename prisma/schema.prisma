@@ -65,6 +65,8 @@ model User {
   createdAt  DateTime     @default(now())
   profile    UserProfile?
   mealPlanDays MealPlanDay[]
+  shoppingLists ShoppingList[]
+  shoppingCategories ShoppingCategory[]
 }
 
 model UserProfile {
@@ -110,6 +112,7 @@ model Product {
 
   recipeIngredients      RecipeIngredient[]
   mealPlanEntries        MealPlanEntry[]
+  shoppingListItems      ShoppingListItem[]
 
   @@index([normalizedName])
 }
@@ -176,6 +179,50 @@ model IdempotencyKey {
   createdAt DateTime @default(now())
 
   @@unique([operation, key, entityId])
+}
+
+model ShoppingList {
+  id          String             @id @default(cuid())
+  ownerUserId String
+  owner       User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  title       String             @default("My shopping list")
+  items       ShoppingListItem[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([ownerUserId])
+}
+
+model ShoppingCategory {
+  id             String               @id @default(cuid())
+  ownerUserId    String
+  owner          User                 @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name           String
+  normalizedName String
+  items          ShoppingListItem[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([ownerUserId, normalizedName])
+}
+
+model ShoppingListItem {
+  id          String            @id @default(cuid())
+  listId      String
+  list        ShoppingList      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?          @relation(fields: [productId], references: [id])
+  customName  String?
+  amount      Float?
+  unit        String?
+  note        String?
+  isDone      Boolean           @default(false)
+  categoryId  String?
+  category    ShoppingCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([listId, isDone])
 }
 
 model MealPlanDay {

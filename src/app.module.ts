@@ -6,6 +6,7 @@ import { MealPlansModule } from "./meal-plans/meal-plans.module";
 import { McpModule } from "./mcp/mcp.module";
 import { ProductsModule } from "./products/products.module";
 import { RecipesModule } from "./recipes/recipes.module";
+import { ShoppingListModule } from "./shopping-list/shopping-list.module";
 import { UsersModule } from "./users/users.module";
 
 @Module({
@@ -14,6 +15,7 @@ import { UsersModule } from "./users/users.module";
     ProductsModule,
     RecipesModule,
     MealPlansModule,
+    ShoppingListModule,
     UsersModule,
     AuthModule,
     McpModule,
