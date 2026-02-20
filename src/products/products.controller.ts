@@ -1,5 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { ProductIdDto } from "./dto/product-id.dto";
 import { SearchProductsDto } from "./dto/search-products.dto";
@@ -34,6 +43,21 @@ export class ProductsController {
       },
     },
   })
+  @ApiCreatedResponse({
+    description: "Created product",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "prod_123" },
+        name: { type: "string", example: "Greek Yogurt" },
+        brand: { type: "string", nullable: true, example: "Acme" },
+        kcal100: { type: "number", example: 120 },
+        protein100: { type: "number", example: 10 },
+        fat100: { type: "number", example: 3.5 },
+        carbs100: { type: "number", example: 8 },
+      },
+    },
+  })
   @Post()
   async createManual(@Body() dto: CreateProductDto) {
     return this.productsService.createManual(dto);
@@ -46,6 +70,24 @@ export class ProductsController {
       "Search by name or brand with a simple case-insensitive contains filter.",
   })
   @ApiQuery({ name: "query", required: false, example: "yogurt" })
+  @ApiOkResponse({
+    description: "Matched products",
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "prod_123" },
+          name: { type: "string", example: "Greek Yogurt" },
+          brand: { type: "string", nullable: true, example: "Acme" },
+          kcal100: { type: "number", example: 120 },
+          protein100: { type: "number", example: 10 },
+          fat100: { type: "number", example: 3.5 },
+          carbs100: { type: "number", example: 8 },
+        },
+      },
+    },
+  })
   @Get()
   async search(@Query() dto: SearchProductsDto) {
     return this.productsService.search(dto.query);
@@ -72,6 +114,21 @@ export class ProductsController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated product",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "prod_123" },
+        name: { type: "string", example: "Greek Yogurt 2%" },
+        brand: { type: "string", nullable: true, example: "Acme" },
+        kcal100: { type: "number", example: 110 },
+        protein100: { type: "number", example: 11 },
+        fat100: { type: "number", example: 2.8 },
+        carbs100: { type: "number", example: 7.5 },
+      },
+    },
+  })
   async update(@Param() params: ProductIdDto, @Body() dto: UpdateProductDto) {
     return this.productsService.update(params.productId, dto);
   }
@@ -82,6 +139,17 @@ export class ProductsController {
     description: "Deletes product if it is not used in recipes/shopping list.",
   })
   @ApiParam({ name: "productId", example: "prod_123" })
+  @ApiResponse({
+    status: 200,
+    description: "Deletion result",
+    schema: {
+      type: "object",
+      properties: {
+        deleted: { type: "boolean", example: true },
+        productId: { type: "string", example: "prod_123" },
+      },
+    },
+  })
   async remove(@Param() params: ProductIdDto) {
     return this.productsService.remove(params.productId);
   }

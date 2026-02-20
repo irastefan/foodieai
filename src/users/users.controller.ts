@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Headers, Post, Put } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
+import { EmptyBodyDto } from "./dto/empty-body.dto";
 import { UpsertUserProfileDto } from "./dto/upsert-user-profile.dto";
+import { UserMeResponseDto } from "./dto/user-me-response.dto";
+import { UserProfileResponseDto } from "./dto/user-profile-response.dto";
 import { UsersService } from "./users.service";
 
 @ApiTags("users")
@@ -18,6 +21,10 @@ export class UsersController {
   @ApiOperation({
     summary: "Get current user",
     description: "Returns the authenticated user and profile from Bearer token.",
+  })
+  @ApiOkResponse({
+    description: "Current user with profile",
+    type: UserMeResponseDto,
   })
   async getMe(@Headers() headers: Record<string, string | string[] | undefined>) {
     const userId = await this.resolveUserId(headers);
@@ -49,6 +56,10 @@ export class UsersController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Saved profile",
+    type: UserProfileResponseDto,
+  })
   async upsertProfile(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() body: UpsertUserProfileDto,
@@ -64,13 +75,17 @@ export class UsersController {
     description: "Recalculates targets if required fields are present.",
   })
   @ApiBody({
-    schema: { type: "object", additionalProperties: false },
+    type: EmptyBodyDto,
     examples: {
       empty: {
         summary: "No payload",
         value: {},
       },
     },
+  })
+  @ApiOkResponse({
+    description: "Profile with recalculated targets",
+    type: UserProfileResponseDto,
   })
   async recalculateTargets(
     @Headers() headers: Record<string, string | string[] | undefined>,

@@ -1,5 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { RecipeIdDto } from "./dto/recipe-id.dto";
 import { SearchRecipesDto } from "./dto/search-recipes.dto";
@@ -34,6 +43,20 @@ export class RecipesController {
       },
     },
   })
+  @ApiCreatedResponse({
+    description: "Created recipe",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "rec_123" },
+        title: { type: "string", example: "Omelette" },
+        category: { type: "string", nullable: true, example: "breakfast" },
+        servings: { type: "number", nullable: true, example: 2 },
+        ingredients: { type: "array", items: { type: "object" } },
+        steps: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async create(@Body() dto: CreateRecipeDto) {
     return this.recipesService.create(dto);
   }
@@ -46,6 +69,21 @@ export class RecipesController {
   @ApiQuery({ name: "query", required: false, example: "omelette" })
   @ApiQuery({ name: "category", required: false, example: "breakfast" })
   @ApiQuery({ name: "limit", required: false, example: 5 })
+  @ApiOkResponse({
+    description: "Recipe search result",
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "rec_123" },
+          title: { type: "string", example: "Omelette" },
+          category: { type: "string", nullable: true, example: "breakfast" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+    },
+  })
   async search(@Query() dto: SearchRecipesDto) {
     return this.recipesService.search(dto.query, dto.category, dto.limit);
   }
@@ -56,6 +94,23 @@ export class RecipesController {
     description: "Returns recipe with ingredients and steps.",
   })
   @ApiParam({ name: "recipeId", example: "rec_123" })
+  @ApiOkResponse({
+    description: "Recipe details",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "rec_123" },
+        title: { type: "string", example: "Omelette" },
+        category: { type: "string", nullable: true, example: "breakfast" },
+        description: { type: "string", nullable: true, example: "Quick breakfast" },
+        servings: { type: "number", nullable: true, example: 2 },
+        ingredients: { type: "array", items: { type: "object" } },
+        steps: { type: "array", items: { type: "object" } },
+        nutritionTotal: { type: "object", nullable: true },
+        nutritionPerServing: { type: "object", nullable: true },
+      },
+    },
+  })
   async get(@Param() params: RecipeIdDto) {
     return this.recipesService.get(params.recipeId);
   }
@@ -85,6 +140,18 @@ export class RecipesController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated recipe",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "rec_123" },
+        title: { type: "string", example: "Omelette v2" },
+        ingredients: { type: "array", items: { type: "object" } },
+        steps: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async update(@Param() params: RecipeIdDto, @Body() dto: UpdateRecipeDto) {
     return this.recipesService.update(params.recipeId, dto);
   }
@@ -95,6 +162,17 @@ export class RecipesController {
     description: "Deletes recipe by id.",
   })
   @ApiParam({ name: "recipeId", example: "rec_123" })
+  @ApiResponse({
+    status: 200,
+    description: "Deletion result",
+    schema: {
+      type: "object",
+      properties: {
+        deleted: { type: "boolean", example: true },
+        recipeId: { type: "string", example: "rec_123" },
+      },
+    },
+  })
   async remove(@Param() params: RecipeIdDto) {
     return this.recipesService.remove(params.recipeId);
   }

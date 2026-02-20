@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { AddShoppingCategoryDto } from "./dto/add-shopping-category.dto";
 import { AddShoppingItemDto, SetShoppingItemStateDto } from "./dto/add-shopping-item.dto";
@@ -18,6 +18,18 @@ export class ShoppingListController {
 
   @Get()
   @ApiOperation({ summary: "Get shopping list" })
+  @ApiOkResponse({
+    description: "Shopping list",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "list_123" },
+        title: { type: "string", example: "My shopping list" },
+        categories: { type: "array", items: { type: "object" } },
+        items: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async getList(@Headers() headers: Record<string, string | string[] | undefined>) {
     const userId = await this.resolveUserId(headers);
     return this.shoppingListService.getList(userId);
@@ -25,6 +37,19 @@ export class ShoppingListController {
 
   @Get("categories")
   @ApiOperation({ summary: "List shopping categories" })
+  @ApiOkResponse({
+    description: "Shopping categories",
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "cat_123" },
+          name: { type: "string", example: "Dairy" },
+        },
+      },
+    },
+  })
   async listCategories(@Headers() headers: Record<string, string | string[] | undefined>) {
     const userId = await this.resolveUserId(headers);
     return this.shoppingListService.listCategories(userId);
@@ -38,6 +63,16 @@ export class ShoppingListController {
       create: {
         summary: "Create category",
         value: { name: "Dairy" },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: "Created or updated category",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "cat_123" },
+        name: { type: "string", example: "Dairy" },
       },
     },
   })
@@ -61,6 +96,16 @@ export class ShoppingListController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated category",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "cat_123" },
+        name: { type: "string", example: "Vegetables" },
+      },
+    },
+  })
   async updateCategory(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingCategoryIdDto,
@@ -73,6 +118,19 @@ export class ShoppingListController {
   @Delete("categories/:categoryId")
   @ApiOperation({ summary: "Remove category" })
   @ApiParam({ name: "categoryId", example: "cat_123" })
+  @ApiOkResponse({
+    description: "Remaining categories",
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "cat_123" },
+          name: { type: "string", example: "Dairy" },
+        },
+      },
+    },
+  })
   async removeCategory(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingCategoryIdDto,
@@ -102,6 +160,18 @@ export class ShoppingListController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated shopping list after add item",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "list_123" },
+        title: { type: "string", example: "My shopping list" },
+        categories: { type: "array", items: { type: "object" } },
+        items: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async addItem(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() dto: AddShoppingItemDto,
@@ -126,6 +196,18 @@ export class ShoppingListController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated shopping list after state change",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "list_123" },
+        title: { type: "string", example: "My shopping list" },
+        categories: { type: "array", items: { type: "object" } },
+        items: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async setItemState(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingItemIdDto,
@@ -138,6 +220,18 @@ export class ShoppingListController {
   @Delete("items/:itemId")
   @ApiOperation({ summary: "Remove shopping item" })
   @ApiParam({ name: "itemId", example: "item_123" })
+  @ApiOkResponse({
+    description: "Updated shopping list after remove",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "list_123" },
+        title: { type: "string", example: "My shopping list" },
+        categories: { type: "array", items: { type: "object" } },
+        items: { type: "array", items: { type: "object" } },
+      },
+    },
+  })
   async removeItem(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingItemIdDto,

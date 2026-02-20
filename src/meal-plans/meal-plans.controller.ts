@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { AddMealPlanEntryDto } from "./dto/add-meal-plan-entry.dto";
 import { GetMealPlanDayDto } from "./dto/get-meal-plan-day.dto";
@@ -20,6 +20,19 @@ export class MealPlansController {
     description: "Returns day meal plan with K/B/Zh/U per slot and total.",
   })
   @ApiQuery({ name: "date", required: false, example: "2026-02-20" })
+  @ApiOkResponse({
+    description: "Day meal plan",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "mpd_123" },
+        date: { type: "string", example: "2026-02-20" },
+        slots: { type: "object" },
+        nutritionBySlot: { type: "object" },
+        nutritionTotal: { type: "object" },
+      },
+    },
+  })
   async getDay(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Query() query: GetMealPlanDayDto,
@@ -57,6 +70,19 @@ export class MealPlansController {
       },
     },
   })
+  @ApiOkResponse({
+    description: "Updated day meal plan after add",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "mpd_123" },
+        date: { type: "string", example: "2026-02-20" },
+        slots: { type: "object" },
+        nutritionBySlot: { type: "object" },
+        nutritionTotal: { type: "object" },
+      },
+    },
+  })
   async addEntry(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() dto: AddMealPlanEntryDto,
@@ -71,6 +97,19 @@ export class MealPlansController {
     description: "Removes entry from day plan and recalculates totals.",
   })
   @ApiParam({ name: "entryId", example: "entry_123" })
+  @ApiOkResponse({
+    description: "Updated day meal plan after remove",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", example: "mpd_123" },
+        date: { type: "string", example: "2026-02-20" },
+        slots: { type: "object" },
+        nutritionBySlot: { type: "object" },
+        nutritionTotal: { type: "object" },
+      },
+    },
+  })
   async removeEntry(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: RemoveMealPlanEntryDto,
