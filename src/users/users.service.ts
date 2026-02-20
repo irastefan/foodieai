@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { ActivityLevel, GoalType, Sex } from "@prisma/client";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { ActivityLevel, GoalType, ProductScope, RecipeVisibility, Sex } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { TdeeService } from "../tdee/tdee.service";
 
@@ -120,6 +120,38 @@ export class UsersService {
     return this.recalculateIfPossible(userId, profile, true);
   }
 
+  async getProductsByUser(ownerUserId: string, viewerUserId?: string) {
+    await this.ensureUserExists(ownerUserId);
+    return this.prisma.product.findMany({
+      where: {
+        ownerUserId,
+        ...(viewerUserId === ownerUserId
+          ? {}
+          : { scope: ProductScope.GLOBAL }),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  }
+
+  async getRecipesByUser(ownerUserId: string, viewerUserId?: string) {
+    await this.ensureUserExists(ownerUserId);
+    return this.prisma.recipe.findMany({
+      where: {
+        ownerUserId,
+        ...(viewerUserId === ownerUserId
+          ? {}
+          : { visibility: RecipeVisibility.PUBLIC }),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      include: {
+        ingredients: { orderBy: { order: "asc" } },
+        steps: { orderBy: { order: "asc" } },
+      },
+    });
+  }
+
   private async recalculateIfPossible(
     userId: string,
     profile: {
@@ -194,5 +226,19 @@ export class UsersService {
       throw new BadRequestException("birthDate is invalid");
     }
     return date;
+  }
+
+  private async ensureUserExists(userId: string) {
+    const exists = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!exists) {
+      throw new NotFoundException({
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+        userId,
+      });
+    }
   }
 }
