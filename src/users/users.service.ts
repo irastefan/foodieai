@@ -15,11 +15,15 @@ export type UpsertProfileInput = {
   calorieDelta?: number;
 };
 
-export class MissingFieldsError extends Error {
+export class MissingFieldsError extends BadRequestException {
   readonly missingFields: string[];
 
   constructor(missingFields: string[]) {
-    super("Missing required fields for target calculation");
+    super({
+      code: "MISSING_FIELDS",
+      message: "Missing required fields for target calculation",
+      missingFields,
+    });
     this.missingFields = missingFields;
   }
 }

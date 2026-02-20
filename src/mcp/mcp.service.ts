@@ -1,22 +1,20 @@
-import { Injectable } from "@nestjs/common";
-import { Prisma, Product } from "@prisma/client";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { Product } from "@prisma/client";
 import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
+import { AddMealPlanEntryDto } from "../meal-plans/dto/add-meal-plan-entry.dto";
+import { GetMealPlanDayDto } from "../meal-plans/dto/get-meal-plan-day.dto";
+import { RemoveMealPlanEntryDto } from "../meal-plans/dto/remove-meal-plan-entry.dto";
+import { MealPlansService } from "../meal-plans/meal-plans.service";
 import { CreateProductDto } from "../products/dto/create-product.dto";
 import { ProductsService } from "../products/products.service";
-import { AddRecipeDraftIngredientDto } from "../recipes/dto/add-recipe-draft-ingredient.dto";
-import { CreateRecipeDraftDto } from "../recipes/dto/create-recipe-draft.dto";
-import { DraftIdDto } from "../recipes/dto/draft-id.dto";
+import { CreateRecipeDto } from "../recipes/dto/create-recipe.dto";
 import { RecipeIdDto } from "../recipes/dto/recipe-id.dto";
-import { RemoveRecipeDraftIngredientDto } from "../recipes/dto/remove-recipe-draft-ingredient.dto";
 import { SearchRecipesDto } from "../recipes/dto/search-recipes.dto";
-import { SetRecipeDraftStepsDto } from "../recipes/dto/set-recipe-draft-steps.dto";
-import { RecipeDraftsService } from "../recipes/recipe-drafts.service";
 import { RecipesService } from "../recipes/recipes.service";
-import { DraftIncompleteError, RecipeDraftNotFoundError, RecipeNotFoundError } from "../recipes/recipes.errors";
 import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
 import { UsersService } from "../users/users.service";
-import { McpHandledError, throwMcpError } from "./mcp.utils";
+import { throwMcpError } from "./mcp.utils";
 
 export class McpValidationError extends Error {
   readonly errors: ValidationError[];
@@ -62,25 +60,16 @@ type ToolDefinition = {
 export class McpService {
   constructor(
     private readonly productsService: ProductsService,
-    private readonly recipeDraftsService: RecipeDraftsService,
     private readonly recipesService: RecipesService,
+    private readonly mealPlansService: MealPlansService,
     private readonly usersService: UsersService,
   ) {
     this.toolRegistry = this.buildToolRegistry();
   }
 
-  private readonly toolAliases: Record<string, string> = {
-    "recipe.createDraft": "recipeDraft.create",
-  };
-
   private readonly toolRegistry: Record<string, ToolDefinition>;
 
-  private readonly recentCreates = new Map<
-    string,
-    { expiresAt: number; product: Product }
-  >();
-
-  // Tool catalog exposed via tools/list.
+  private readonly recentCreates = new Map<string, { expiresAt: number; product: Product }>();
 
   listTools() {
     return Object.values(this.toolRegistry).map((tool) => ({
@@ -97,8 +86,7 @@ export class McpService {
   }
 
   getToolDefinition(name: string) {
-    const resolved = this.resolveToolName(name);
-    return resolved ? this.toolRegistry[resolved] : undefined;
+    return this.toolRegistry[name];
   }
 
   async executeTool(
@@ -106,8 +94,7 @@ export class McpService {
     rawArgs: Record<string, unknown>,
     context: { userId?: string; headers: Record<string, unknown>; requestId: string },
   ) {
-    const resolvedName = this.resolveToolName(name);
-    const tool = resolvedName ? this.toolRegistry[resolvedName] : undefined;
+    const tool = this.toolRegistry[name];
     if (!tool) {
       throwMcpError(-32601, "NOT_FOUND");
     }
@@ -116,11 +103,6 @@ export class McpService {
     const args = await this.validateDtoIfPresent(tool, validatedArgs);
     const normalizedArgs = this.normalizeArgs(tool.name, args);
     return tool.handler(normalizedArgs, context);
-  }
-
-  private resolveToolName(name: string) {
-    const canonical = this.toolAliases[name] ?? name;
-    return this.toolRegistry[canonical] ? canonical : undefined;
   }
 
   private ensureAuth(
@@ -262,12 +244,22 @@ export class McpService {
   }
 
   private normalizeArgs(name: string, args: Record<string, unknown>) {
-    if (name === "recipeDraft.addIngredient" && this.isPlainObject(args.ingredient)) {
-      args.ingredient = this.normalizeIngredient(args.ingredient);
+    if (name === "recipe.create" && Array.isArray(args.ingredients)) {
+      args.ingredients = args.ingredients.map((ingredient) =>
+        this.isPlainObject(ingredient) ? this.normalizeIngredient(ingredient) : ingredient,
+      );
     }
     if (name === "recipe.search" || name === "product.search") {
       if (typeof args.limit === "number" && args.limit > 50) {
         args.limit = 50;
+      }
+    }
+    if (name === "mealPlan.addEntry") {
+      if (typeof args.slot === "string") {
+        args.slot = args.slot.trim().toUpperCase();
+      }
+      if (typeof args.unit === "string") {
+        args.unit = args.unit.trim().toLowerCase();
       }
     }
     return args;
@@ -365,22 +357,14 @@ export class McpService {
           text: "✅ MCP capabilities",
           json: {
             toolsByIntent: {
-              createRecipe: [
-                "recipeDraft.create",
-                "recipeDraft.addIngredient",
-                "recipeDraft.setSteps",
-                "recipeDraft.validate",
-                "recipeDraft.recalculate",
-                "recipeDraft.publish",
-                "recipeDraft.fromRecipe",
-              ],
+              createRecipe: ["recipe.create"],
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
+              planMeals: ["mealPlan.dayGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
             },
             flows: {
-              recipe: [
-                "create/fromRecipe -> addIngredient* -> setSteps -> recalc -> validate -> publish",
-              ],
+              recipe: ["create -> get"],
+              mealPlan: ["dayGet -> addEntry* -> dayGet"],
             },
           },
           meta: { requestId: context.requestId },
@@ -397,7 +381,10 @@ export class McpService {
           type: "object",
           additionalProperties: false,
           properties: {
-            topic: { type: ["string", "null"], enum: ["recipes", "products", "auth", "all", null] },
+            topic: {
+              type: ["string", "null"],
+              enum: ["recipes", "products", "users", "meal-plans", "all", null],
+            },
           },
           required: [],
         },
@@ -421,25 +408,28 @@ export class McpService {
           const topic = typeof args.topic === "string" ? args.topic : "all";
           const helpText =
             topic === "products"
-              ? "Products:\n- Search products: recipe asks for ingredients with nutrition, call product.search\n- Create manual: when user provides nutrition per 100g, call product.createManual"
-              : topic === "auth"
-                ? "Auth:\n- user.me returns profile+targets\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates from profile"
-                : "Recipes:\nFlow: recipeDraft.create/fromRecipe -> addIngredient* -> setSteps -> recalc -> validate -> publish\nUse recipeDraft.recalculate to refresh nutrition, recipeDraft.fromRecipe to edit existing, recipe.search/get for published recipes.";
+              ? "Products:\n- Search products before recipe creation: product.search\n- Add manual product with macros: product.createManual"
+              : topic === "meal-plans"
+                ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
+              : topic === "users"
+                ? "Users:\n- user.me returns profile\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates targets"
+                : "Recipes:\n- Create in one call with product-linked ingredients: recipe.create\n- Then use recipe.search / recipe.get.";
           const examples = {
             jsonrpc: "2.0",
             id: 1,
             method: "tools/call",
             params: {
-              name: "recipeDraft.addIngredient",
+              name: "recipe.create",
               arguments: {
-                draftId: "draft_123",
-                ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+                title: "Omelette",
+                ingredients: [{ productId: "prod_egg", amount: 120, unit: "g" }],
+                steps: ["Beat eggs", "Cook"],
               },
             },
           };
           return {
             text: "✅ Help",
-            json: { topic, examples },
+            json: { topic, helpText, examples },
             meta: { requestId: context.requestId },
           };
         },
@@ -668,11 +658,145 @@ export class McpService {
           };
         },
       },
-      "recipeDraft.create": {
-        name: "recipeDraft.create",
+      "mealPlan.dayGet": {
+        name: "mealPlan.dayGet",
         description:
-          "Create a recipe draft.\nUse when starting a new recipe, even incomplete.\nReturns draftId.",
-        tags: ["recipes", "drafts"],
+          "Get day meal plan with K/B/Zh/U by slots and total.\nUse to inspect current daily plan.\nReturns day object.",
+        tags: ["meal-plans"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { date: { type: ["string", "null"] } },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Today plan", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 24,
+              method: "tools/call",
+              params: { name: "mealPlan.dayGet", arguments: { date: "2026-02-20" } },
+            },
+          },
+        ],
+        dtoClass: GetMealPlanDayDto,
+        handler: async (args, context) => {
+          const day = await this.getMealPlanDay(context.userId as string, args);
+          return {
+            text: "✅ Meal plan loaded",
+            json: day,
+          };
+        },
+      },
+      "mealPlan.addEntry": {
+        name: "mealPlan.addEntry",
+        description:
+          "Add product or recipe to a meal slot.\nUse for breakfast/lunch/dinner/snack planning.\nReturns recalculated day plan.",
+        tags: ["meal-plans"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            date: { type: ["string", "null"] },
+            slot: { type: "string", enum: ["BREAKFAST", "LUNCH", "DINNER", "SNACK"] },
+            productId: { type: ["string", "null"] },
+            recipeId: { type: ["string", "null"] },
+            amount: { type: ["number", "null"] },
+            unit: { type: ["string", "null"] },
+            servings: { type: ["number", "null"] },
+          },
+          required: ["slot"],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          {
+            summary: "Add product to breakfast",
+            arguments: {
+              slot: "BREAKFAST",
+              productId: "prod_123",
+              amount: 150,
+              unit: "g",
+            },
+          },
+          {
+            summary: "Add recipe to dinner",
+            arguments: {
+              slot: "DINNER",
+              recipeId: "rec_123",
+              servings: 1,
+            },
+          },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 25,
+              method: "tools/call",
+              params: {
+                name: "mealPlan.addEntry",
+                arguments: { slot: "SNACK", productId: "prod_123", amount: 100, unit: "g" },
+              },
+            },
+          },
+        ],
+        dtoClass: AddMealPlanEntryDto,
+        handler: async (args, context) => {
+          const day = await this.addMealPlanEntry(context.userId as string, args);
+          return {
+            text: "✅ Meal plan updated",
+            json: day,
+          };
+        },
+      },
+      "mealPlan.removeEntry": {
+        name: "mealPlan.removeEntry",
+        description:
+          "Remove item from day meal plan.\nUse when user deletes a meal item.\nReturns recalculated day plan.",
+        tags: ["meal-plans"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { entryId: { type: "string" } },
+          required: ["entryId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Remove entry", arguments: { entryId: "entry_123" } }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 26,
+              method: "tools/call",
+              params: { name: "mealPlan.removeEntry", arguments: { entryId: "entry_123" } },
+            },
+          },
+        ],
+        dtoClass: RemoveMealPlanEntryDto,
+        handler: async (args, context) => {
+          const day = await this.removeMealPlanEntry(context.userId as string, args);
+          return {
+            text: "✅ Entry removed",
+            json: day,
+          };
+        },
+      },
+      "recipe.create": {
+        name: "recipe.create",
+        description:
+          "Create a recipe in one call.\nUse product-linked ingredients only.\nReturns recipeId and recipe.",
+        tags: ["recipes"],
         auth: "required",
         public: false,
         inputSchema: {
@@ -683,13 +807,39 @@ export class McpService {
             category: { type: ["string", "null"] },
             description: { type: ["string", "null"] },
             servings: { type: ["number", "null"] },
-            sourceRecipeId: { type: ["string", "null"] },
-            clientRequestId: { type: ["string", "null"] },
+            ingredients: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  productId: { type: "string" },
+                  name: { type: ["string", "null"] },
+                  amount: { type: "number" },
+                  unit: { type: "string" },
+                },
+                required: ["productId", "amount", "unit"],
+              },
+            },
+            steps: { type: "array", items: { type: "string" } },
           },
-          required: ["title"],
+          required: ["title", "ingredients", "steps"],
         },
-        outputSchema: { type: "object", properties: { draftId: { type: "string" } } },
-        examples: [{ summary: "Create draft", arguments: { title: "Omelette", category: "breakfast" } }],
+        outputSchema: { type: "object", properties: { recipeId: { type: "string" } } },
+        examples: [
+          {
+            summary: "Create recipe",
+            arguments: {
+              title: "Omelette",
+              servings: 2,
+              ingredients: [
+                { productId: "prod_egg", amount: 120, unit: "g" },
+                { productId: "prod_butter", amount: 10, unit: "g" },
+              ],
+              steps: ["Beat eggs", "Cook", "Serve"],
+            },
+          },
+        ],
         rpcExamples: [
           {
             summary: "tools/call",
@@ -697,418 +847,24 @@ export class McpService {
               jsonrpc: "2.0",
               id: 30,
               method: "tools/call",
-              params: { name: "recipeDraft.create", arguments: { title: "Omelette", category: "breakfast" } },
-            },
-          },
-        ],
-        dtoClass: CreateRecipeDraftDto,
-        handler: async (args, context) => {
-          const draft = await this.recipeDraftsService.createDraft({
-            ...(args as Record<string, unknown>),
-            clientRequestId: (args as Record<string, unknown>).clientRequestId ?? context.requestId,
-          } as CreateRecipeDraftDto);
-          return { text: "✅ Draft created", json: { draftId: draft.id, draft } };
-        },
-      },
-      "recipeDraft.addIngredient": {
-        name: "recipeDraft.addIngredient",
-        description:
-          "Add ingredient to draft.\nUse when user lists ingredients or quantities.\nReturns draft with ingredients.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-            clientRequestId: { type: ["string", "null"] },
-            ingredient: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                originalText: { type: ["string", "null"] },
-                name: { type: "string" },
-                amount: { type: ["number", "null"] },
-                unit: { type: ["string", "null"] },
-                productId: { type: ["string", "null"] },
-                clientRequestId: { type: ["string", "null"] },
-                macrosPer100: {
-                  type: ["object", "null"],
-                  additionalProperties: false,
-                  properties: {
-                    kcal100: { type: "number" },
-                    protein100: { type: "number" },
-                    fat100: { type: "number" },
-                    carbs100: { type: "number" },
-                  },
-                  required: ["kcal100", "protein100", "fat100", "carbs100"],
-                },
-                assumptions: { type: ["object", "null"] },
-                order: { type: ["number", "null"] },
-              },
-              required: ["name"],
-            },
-          },
-          required: ["draftId", "ingredient"],
-        },
-        outputSchema: { type: "object" },
-        examples: [
-          {
-            summary: "Add snapshot ingredient",
-            arguments: {
-              draftId: "draft_123",
-              ingredient: {
-                name: "Tomato",
-                amount: 120,
-                unit: "g",
-                macrosPer100: { kcal100: 18, protein100: 0.9, fat100: 0.2, carbs100: 3.9 },
-                clientRequestId: "req-ing-1",
-              },
-            },
-          },
-          {
-            summary: "Add product-linked ingredient with nutrition",
-            arguments: {
-              draftId: "draft_123",
-              ingredient: {
-                name: "Egg",
-                amount: 2,
-                unit: "pcs",
-                productId: "prod_123",
-                macrosPer100: { kcal100: 155, protein100: 13, fat100: 11, carbs100: 1.1 },
-                clientRequestId: "req-ing-2",
-              },
-            },
-          },
-        ],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 31,
-              method: "tools/call",
               params: {
-                name: "recipeDraft.addIngredient",
+                name: "recipe.create",
                 arguments: {
-                  draftId: "draft_123",
-                  ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+                  title: "Omelette",
+                  ingredients: [{ productId: "prod_egg", amount: 120, unit: "g" }],
+                  steps: ["Beat eggs", "Cook"],
                 },
               },
             },
           },
         ],
-        dtoClass: AddRecipeDraftIngredientDto,
+        dtoClass: CreateRecipeDto,
         handler: async (args) => {
-          try {
-            const draft = await this.recipeDraftsService.addIngredient(
-              args.draftId as string,
-              args.ingredient as AddRecipeDraftIngredientDto["ingredient"],
-              (args.clientRequestId as string | null | undefined) ??
-                (args.ingredient as AddRecipeDraftIngredientDto["ingredient"]).clientRequestId ??
-                null,
-            );
-            return { text: "✅ Ingredient added", json: { draftId: draft.id, draft } };
-          } catch (error) {
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
-        },
-      },
-      "recipeDraft.removeIngredient": {
-        name: "recipeDraft.removeIngredient",
-        description:
-          "Remove ingredient from draft.\nUse to delete an ingredient.\nReturns remaining ingredients.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-            ingredientId: { type: "string" },
-            clientRequestId: { type: ["string", "null"] },
-          },
-          required: ["draftId", "ingredientId"],
-        },
-        outputSchema: { type: "object" },
-        examples: [{ summary: "Remove ingredient", arguments: { draftId: "draft_123", ingredientId: "ing_1" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 32,
-              method: "tools/call",
-              params: {
-                name: "recipeDraft.removeIngredient",
-                arguments: { draftId: "draft_123", ingredientId: "ing_1" },
-              },
-            },
-          },
-        ],
-        dtoClass: RemoveRecipeDraftIngredientDto,
-        handler: async (args) => {
-          try {
-            const ingredients = await this.recipeDraftsService.removeIngredient(
-              args.draftId as string,
-              args.ingredientId as string,
-              args.clientRequestId as string | null | undefined,
-            );
-            return {
-              text: "✅ Ingredient removed",
-              json: { draftId: args.draftId, ingredientId: args.ingredientId, ingredients },
-            };
-          } catch (error) {
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
-        },
-      },
-      "recipeDraft.setSteps": {
-        name: "recipeDraft.setSteps",
-        description:
-          "Replace draft steps.\nUse after collecting ordered instructions.\nReturns updated steps.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            draftId: { type: "string" },
-            steps: { type: "array", items: { type: "string" } },
-            clientRequestId: { type: ["string", "null"] },
-          },
-          required: ["draftId", "steps"],
-        },
-        outputSchema: { type: "object" },
-        examples: [
-          {
-            summary: "Set steps",
-            arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook in pan", "Serve"] },
-          },
-        ],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 33,
-              method: "tools/call",
-              params: {
-                name: "recipeDraft.setSteps",
-                arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook in pan", "Serve"] },
-              },
-            },
-          },
-        ],
-        dtoClass: SetRecipeDraftStepsDto,
-        handler: async (args) => {
-          try {
-            const steps = await this.recipeDraftsService.setSteps(
-              args.draftId as string,
-              args.steps as string[],
-              args.clientRequestId as string | null | undefined,
-            );
-            return { text: "✅ Steps updated", json: { draftId: args.draftId, steps } };
-          } catch (error) {
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
-        },
-      },
-      "recipeDraft.get": {
-        name: "recipeDraft.get",
-        description:
-          "Get draft by id.\nUse to inspect current ingredients/steps.\nReturns draft.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
-          required: ["draftId"],
-        },
-        outputSchema: { type: "object" },
-        examples: [{ summary: "Get draft", arguments: { draftId: "draft_123" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 34,
-              method: "tools/call",
-              params: { name: "recipeDraft.get", arguments: { draftId: "draft_123" } },
-            },
-          },
-        ],
-        dtoClass: DraftIdDto,
-        handler: async (args) => {
-          try {
-            const draft = await this.recipeDraftsService.getDraft(args.draftId as string);
-            return { text: "✅ Draft loaded", json: { draftId: draft.id, draft } };
-          } catch (error) {
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
-        },
-      },
-      "recipeDraft.validate": {
-        name: "recipeDraft.validate",
-        description:
-          "Validate draft softly.\nUse before publish to find gaps.\nReturns validation result (no throw).",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
-          required: ["draftId"],
-        },
-        outputSchema: { type: "object" },
-        examples: [{ summary: "Validate draft", arguments: { draftId: "draft_123" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 35,
-              method: "tools/call",
-              params: { name: "recipeDraft.validate", arguments: { draftId: "draft_123" } },
-            },
-          },
-        ],
-        dtoClass: DraftIdDto,
-        handler: async (args) => {
-          try {
-            const validation = await this.recipeDraftsService.validateDraft(args.draftId as string);
-            return {
-              text: validation.isValid ? "✅ Draft valid" : "⚠️ Draft incomplete",
-              json: { draftId: args.draftId, ...validation },
-              meta: validation.isValid
-                ? { status: "VALID" }
-                : { status: "INCOMPLETE", missingFields: validation.missingFields },
-            };
-          } catch (error) {
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
-        },
-      },
-      "recipeDraft.recalculate": {
-        name: "recipeDraft.recalculate",
-        description:
-          "Recalculate draft nutrition.\nUse to refresh totals after edits.\nReturns draft with nutritionTotal/perServing.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { draftId: { type: "string" } },
-          required: ["draftId"],
-        },
-        outputSchema: { type: "object" },
-        examples: [{ summary: "Recalculate draft", arguments: { draftId: "draft_123" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 37,
-              method: "tools/call",
-              params: { name: "recipeDraft.recalculate", arguments: { draftId: "draft_123" } },
-            },
-          },
-        ],
-        dtoClass: DraftIdDto,
-        handler: async (args) => {
-          const draft = await this.recipeDraftsService.recalcDraft(args.draftId as string);
+          const recipe = await this.createRecipe(args);
           return {
-            text: "✅ Draft recalculated",
-            json: { draftId: draft.id, draft },
+            text: `✅ Recipe created: ${recipe.title}`,
+            json: { recipeId: recipe.id, recipe },
           };
-        },
-      },
-      "recipeDraft.publish": {
-        name: "recipeDraft.publish",
-          description:
-          "Publish draft into recipe.\nUse after validation passes.\nReturns recipeId.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { draftId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
-          required: ["draftId"],
-        },
-        outputSchema: { type: "object", properties: { recipeId: { type: "string" } } },
-        examples: [{ summary: "Publish draft", arguments: { draftId: "draft_123" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 36,
-              method: "tools/call",
-              params: { name: "recipeDraft.publish", arguments: { draftId: "draft_123" } },
-            },
-          },
-        ],
-        dtoClass: DraftIdDto,
-        handler: async (args, context) => {
-          try {
-            const recipe = await this.recipeDraftsService.publishDraft(
-              args.draftId as string,
-              (args.clientRequestId as string | null | undefined) ?? context.requestId,
-            );
-            return {
-              text: `✅ Draft published: ${recipe.title}`,
-              json: { recipeId: recipe.id, title: recipe.title, recipe },
-            };
-          } catch (error) {
-            if (error instanceof DraftIncompleteError) {
-              throwMcpError(-32000, "DRAFT_INCOMPLETE", {
-                missingFields: error.missingFields,
-                missingIngredients: error.missingIngredients,
-                nextActions: [
-                  { askUser: "Provide productId or macrosPer100 for missing ingredients." },
-                  {
-                    callTool: "recipeDraft.addIngredient",
-                    argumentsExample: {
-                      draftId: args.draftId,
-                      ingredient: {
-                        name: "Ingredient name",
-                        productId: "prod_123",
-                        amount: 100,
-                        unit: "g",
-                      },
-                    },
-                  },
-                ],
-              });
-            }
-            if (error instanceof RecipeDraftNotFoundError) {
-              throwMcpError(404, "NOT_FOUND");
-            }
-            throw error;
-          }
         },
       },
       "recipe.search": {
@@ -1158,14 +914,14 @@ export class McpService {
       "recipe.get": {
         name: "recipe.get",
         description:
-          "Get recipe by id.\nUse after search or publish.\nReturns recipe with ingredients and steps.",
+          "Get recipe by id.\nUse after search or create.\nReturns recipe with ingredients and steps.",
         tags: ["recipes"],
         auth: "none",
         public: true,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { recipeId: { type: "string" }, clientRequestId: { type: ["string", "null"] } },
+          properties: { recipeId: { type: "string" } },
           required: ["recipeId"],
         },
         outputSchema: { type: "object" },
@@ -1190,56 +946,16 @@ export class McpService {
               json: { recipeId: recipe.id, recipe },
             };
           } catch (error) {
-            if (error instanceof RecipeNotFoundError) {
+            if (error instanceof NotFoundException) {
               throwMcpError(404, "NOT_FOUND");
             }
             throw error;
           }
         },
       },
-      "recipeDraft.fromRecipe": {
-        name: "recipeDraft.fromRecipe",
-        description:
-          "Get or create draft from published recipe.\nUse to edit existing recipe.\nReturns draftId and draft.",
-        tags: ["recipes", "drafts"],
-        auth: "required",
-        public: false,
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { recipeId: { type: "string" } },
-          required: ["recipeId"],
-        },
-        outputSchema: { type: "object" },
-        examples: [{ summary: "Clone recipe", arguments: { recipeId: "rec_123" } }],
-        rpcExamples: [
-          {
-            summary: "tools/call",
-            request: {
-              jsonrpc: "2.0",
-              id: 50,
-              method: "tools/call",
-              params: {
-                name: "recipeDraft.fromRecipe",
-                arguments: { recipeId: "rec_123", clientRequestId: "req-clone-1" },
-              },
-            },
-          },
-        ],
-        dtoClass: RecipeIdDto,
-        handler: async (args) => {
-          const draft = await this.recipeDraftsService.getOrCreateFromRecipe(args.recipeId as string);
-          return {
-            text: "✅ Draft ready from recipe",
-            json: { draftId: draft.id, draft },
-          };
-        },
-      },
     };
   }
 
-
-  // MCP tool: product.createManual
   async createManual(args: Record<string, unknown>) {
     const dto = await this.validateDto(CreateProductDto, args);
     const signature = this.createSignature(dto);
@@ -1256,73 +972,42 @@ export class McpService {
     return product;
   }
 
-  // MCP tool: product.search
   async search(args: Record<string, unknown>) {
     const query = typeof args.query === "string" ? args.query : undefined;
     return this.productsService.search(query);
   }
 
-  // MCP tool: user.me
   async userMe(userId: string) {
     return this.usersService.getUserWithProfile(userId);
   }
 
-  // MCP tool: userProfile.upsert
   async upsertUserProfile(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateDto(UpsertUserProfileDto, args);
     return this.usersService.upsertProfile(userId, dto);
   }
 
-  // MCP tool: userTargets.recalculate
   async recalculateTargets(userId: string) {
     return this.usersService.recalculateTargets(userId);
   }
 
-  async createRecipeDraft(args: Record<string, unknown>) {
-    const dto = await this.validateDto(CreateRecipeDraftDto, args);
-    const draft = await this.recipeDraftsService.createDraft(dto);
-    return { draftId: draft.id, draft };
+  async getMealPlanDay(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(GetMealPlanDayDto, args);
+    return this.mealPlansService.getDay(userId, dto.date);
   }
 
-  async addRecipeDraftIngredient(args: Record<string, unknown>) {
-    const dto = await this.validateDto(AddRecipeDraftIngredientDto, args);
-    const draft = await this.recipeDraftsService.addIngredient(
-      dto.draftId,
-      dto.ingredient,
-    );
-    return { draft };
+  async addMealPlanEntry(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(AddMealPlanEntryDto, args);
+    return this.mealPlansService.addEntry(userId, dto);
   }
 
-  async removeRecipeDraftIngredient(args: Record<string, unknown>) {
-    const dto = await this.validateDto(RemoveRecipeDraftIngredientDto, args);
-    const ingredients = await this.recipeDraftsService.removeIngredient(
-      dto.draftId,
-      dto.ingredientId,
-    );
-    return { ingredients };
+  async removeMealPlanEntry(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(RemoveMealPlanEntryDto, args);
+    return this.mealPlansService.removeEntry(userId, dto.entryId);
   }
 
-  async setRecipeDraftSteps(args: Record<string, unknown>) {
-    const dto = await this.validateDto(SetRecipeDraftStepsDto, args);
-    const steps = await this.recipeDraftsService.setSteps(dto.draftId, dto.steps);
-    return { steps };
-  }
-
-  async getRecipeDraft(args: Record<string, unknown>) {
-    const dto = await this.validateDto(DraftIdDto, args);
-    const draft = await this.recipeDraftsService.getDraft(dto.draftId);
-    return { draft };
-  }
-
-  async validateRecipeDraft(args: Record<string, unknown>) {
-    const dto = await this.validateDto(DraftIdDto, args);
-    return this.recipeDraftsService.validateDraft(dto.draftId);
-  }
-
-  async publishRecipeDraft(args: Record<string, unknown>) {
-    const dto = await this.validateDto(DraftIdDto, args);
-    const recipe = await this.recipeDraftsService.publishDraft(dto.draftId);
-    return { recipeId: recipe.id, recipe };
+  async createRecipe(args: Record<string, unknown>) {
+    const dto = await this.validateDto(CreateRecipeDto, args);
+    return this.recipesService.create(dto);
   }
 
   async searchRecipes(args: Record<string, unknown>) {
@@ -1335,7 +1020,6 @@ export class McpService {
     return this.recipesService.get(dto.recipeId);
   }
 
-  // Shared DTO validation for MCP tool args.
   private async validateDto<T extends object>(
     dtoClass: new () => T,
     payload: Record<string, unknown> | undefined,

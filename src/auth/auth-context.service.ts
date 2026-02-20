@@ -1,14 +1,9 @@
 import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
-import { OauthService } from "../oauth/oauth.service";
 import { UsersService } from "../users/users.service";
 
 @Injectable()
 export class AuthContextService {
-  // Resolves the current user from a Bearer token.
-  constructor(
-    private readonly oauthService: OauthService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   async getOrCreateUserId(headers: Record<string, string | string[] | undefined>) {
     this.logAuthPresence(headers);
@@ -42,10 +37,6 @@ export class AuthContextService {
   private resolveSubject(token: string) {
     if (!token && process.env.DEV_AUTH_BYPASS_SUB) {
       return process.env.DEV_AUTH_BYPASS_SUB;
-    }
-    const stored = this.oauthService.getSubjectFromToken(token);
-    if (stored) {
-      return stored;
     }
 
     const jwtSubject = this.tryDecodeJwtSubject(token);

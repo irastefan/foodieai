@@ -1,6 +1,6 @@
 import { IsString } from "class-validator";
 
-export class RecipeDraftFromRecipeDto {
+export class RemoveMealPlanEntryDto {
   @IsString()
-  recipeId!: string;
+  entryId!: string;
 }

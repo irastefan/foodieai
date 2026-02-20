@@ -1,19 +1,41 @@
-import { Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { RecipeDraftFromRecipeDto } from "./dto/recipe-draft-from-recipe.dto";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { RecipeIdDto } from "./dto/recipe-id.dto";
 import { SearchRecipesDto } from "./dto/search-recipes.dto";
-import { RecipeDraftsService } from "./recipe-drafts.service";
 import { RecipesService } from "./recipes.service";
 
 @ApiTags("recipes")
 @Controller("v1/recipes")
 export class RecipesController {
-  // REST endpoints for published recipes (search and detail).
-  constructor(
-    private readonly recipesService: RecipesService,
-    private readonly recipeDraftsService: RecipeDraftsService,
-  ) {}
+  constructor(private readonly recipesService: RecipesService) {}
+
+  @Post()
+  @ApiOperation({
+    summary: "Create recipe",
+    description: "Creates a recipe in one request with ingredients linked to products.",
+  })
+  @ApiBody({
+    type: CreateRecipeDto,
+    examples: {
+      create: {
+        summary: "Create in one call",
+        value: {
+          title: "Omelette",
+          category: "breakfast",
+          servings: 2,
+          ingredients: [
+            { productId: "prod_egg", amount: 120, unit: "g" },
+            { productId: "prod_butter", amount: 10, unit: "g" },
+          ],
+          steps: ["Beat eggs", "Cook on pan", "Serve"],
+        },
+      },
+    },
+  })
+  async create(@Body() dto: CreateRecipeDto) {
+    return this.recipesService.create(dto);
+  }
 
   @Get()
   @ApiOperation({
@@ -35,16 +57,5 @@ export class RecipesController {
   @ApiParam({ name: "recipeId", example: "rec_123" })
   async get(@Param() params: RecipeIdDto) {
     return this.recipesService.get(params.recipeId);
-  }
-
-  @Post(":recipeId/draft")
-  @ApiOperation({
-    summary: "Get or create draft from recipe",
-    description:
-      "Returns active draft for recipeId if exists, otherwise clones the recipe (metadata, ingredients, steps) into a new draft.",
-  })
-  @ApiParam({ name: "recipeId", example: "rec_123" })
-  async getOrCreateDraft(@Param() params: RecipeDraftFromRecipeDto) {
-    return this.recipeDraftsService.getOrCreateFromRecipe(params.recipeId);
   }
 }

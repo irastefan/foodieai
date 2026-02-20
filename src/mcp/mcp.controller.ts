@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpException,
   Post,
   Req,
   UnauthorizedException,
@@ -21,13 +22,11 @@ import {
 @ApiTags("mcp")
 @Controller("mcp")
 export class McpController {
-  // MCP JSON-RPC entrypoint and status ping for ChatGPT connector.
   constructor(
     private readonly mcpService: McpService,
     private readonly authContext: AuthContextService,
   ) {}
 
-  // Public health/status check for the MCP server.
   @Get()
   @ApiOperation({
     summary: "MCP status ping",
@@ -37,7 +36,6 @@ export class McpController {
     return { name: "FoodieAI MCP", status: "ok" };
   }
 
-  // MCP JSON-RPC v2 endpoint (tools/list, tools/call, initialize).
   @Post()
   @ApiOperation({
     summary: "MCP JSON-RPC endpoint",
@@ -56,13 +54,12 @@ export class McpController {
           tools: [
             { name: "product.createManual", description: "Create a product manually in FoodieAI" },
             { name: "product.search", description: "Search products by name or brand" },
-            { name: "user.me", description: "Get current user and profile" },
-            { name: "userProfile.upsert", description: "Create or update user profile and calculate targets" },
-            { name: "userTargets.recalculate", description: "Recalculate daily calorie and macro targets" },
+            { name: "recipe.create", description: "Create recipe in one call" },
             { name: "recipe.search", description: "Search recipes" },
             { name: "recipe.get", description: "Get a recipe by id" },
-            { name: "recipeDraft.recalculate", description: "Recalculate draft nutrition" },
-            { name: "recipeDraft.fromRecipe", description: "Get or create draft from recipe" },
+            { name: "mealPlan.dayGet", description: "Get day meal plan" },
+            { name: "mealPlan.addEntry", description: "Add product or recipe to meal plan slot" },
+            { name: "mealPlan.removeEntry", description: "Remove meal plan entry" },
           ],
         },
       },
@@ -83,24 +80,6 @@ export class McpController {
         summary: "List all tools",
         value: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
       },
-      capabilities: {
-        summary: "Capabilities catalog",
-        value: {
-          jsonrpc: "2.0",
-          id: 2,
-          method: "tools/call",
-          params: { name: "mcp.capabilities", arguments: {} },
-        },
-      },
-      helpRecipes: {
-        summary: "Help: recipes",
-        value: {
-          jsonrpc: "2.0",
-          id: 3,
-          method: "tools/call",
-          params: { name: "mcp.help", arguments: { topic: "recipes" } },
-        },
-      },
       productSearch: {
         summary: "Search products",
         value: {
@@ -110,147 +89,19 @@ export class McpController {
           params: { name: "product.search", arguments: { query: "yogurt" } },
         },
       },
-      productCreate: {
-        summary: "Create product",
-        value: {
-          jsonrpc: "2.0",
-          id: 11,
-          method: "tools/call",
-          params: {
-            name: "product.createManual",
-            arguments: { name: "Salmon", kcal100: 208, protein100: 20, fat100: 13, carbs100: 0 },
-          },
-        },
-      },
-      userMe: {
-        summary: "Current user",
-        value: {
-          jsonrpc: "2.0",
-          id: 20,
-          method: "tools/call",
-          params: { name: "user.me", arguments: {} },
-        },
-      },
-      userProfileUpsert: {
-        summary: "Upsert profile",
-        value: {
-          jsonrpc: "2.0",
-          id: 21,
-          method: "tools/call",
-          params: {
-            name: "userProfile.upsert",
-            arguments: {
-              firstName: "Ira",
-              lastName: "Stefan",
-              sex: "FEMALE",
-              heightCm: 168,
-              weightKg: 63,
-            },
-          },
-        },
-      },
-      userTargetsRecalc: {
-        summary: "Recalculate targets",
-        value: {
-          jsonrpc: "2.0",
-          id: 22,
-          method: "tools/call",
-          params: { name: "userTargets.recalculate", arguments: {} },
-        },
-      },
-      recipeDraftCreate: {
-        summary: "Create draft",
+      recipeCreate: {
+        summary: "Create recipe",
         value: {
           jsonrpc: "2.0",
           id: 30,
           method: "tools/call",
-          params: { name: "recipeDraft.create", arguments: { title: "Omelette", category: "breakfast" } },
-        },
-      },
-      recipeDraftAddIngredient: {
-        summary: "Add ingredient",
-        value: {
-          jsonrpc: "2.0",
-          id: 31,
-          method: "tools/call",
           params: {
-            name: "recipeDraft.addIngredient",
+            name: "recipe.create",
             arguments: {
-              draftId: "draft_123",
-              ingredient: { name: "Egg", amount: 2, unit: "pcs" },
+              title: "Omelette",
+              ingredients: [{ productId: "prod_egg", amount: 120, unit: "g" }],
+              steps: ["Beat eggs", "Cook"],
             },
-          },
-        },
-      },
-      recipeDraftRemoveIngredient: {
-        summary: "Remove ingredient",
-        value: {
-          jsonrpc: "2.0",
-          id: 32,
-          method: "tools/call",
-          params: {
-            name: "recipeDraft.removeIngredient",
-            arguments: { draftId: "draft_123", ingredientId: "ing_1" },
-          },
-        },
-      },
-      recipeDraftSetSteps: {
-        summary: "Set steps",
-        value: {
-          jsonrpc: "2.0",
-          id: 33,
-          method: "tools/call",
-          params: {
-            name: "recipeDraft.setSteps",
-            arguments: { draftId: "draft_123", steps: ["Beat eggs", "Cook", "Serve"] },
-          },
-        },
-      },
-      recipeDraftGet: {
-        summary: "Get draft",
-        value: {
-          jsonrpc: "2.0",
-          id: 34,
-          method: "tools/call",
-          params: { name: "recipeDraft.get", arguments: { draftId: "draft_123" } },
-        },
-      },
-      recipeDraftValidate: {
-        summary: "Validate draft",
-        value: {
-          jsonrpc: "2.0",
-          id: 35,
-          method: "tools/call",
-          params: { name: "recipeDraft.validate", arguments: { draftId: "draft_123" } },
-        },
-      },
-      recipeDraftPublish: {
-        summary: "Publish draft",
-        value: {
-          jsonrpc: "2.0",
-          id: 36,
-          method: "tools/call",
-          params: { name: "recipeDraft.publish", arguments: { draftId: "draft_123" } },
-        },
-      },
-      recipeDraftRecalculate: {
-        summary: "Recalculate draft nutrition",
-        value: {
-          jsonrpc: "2.0",
-          id: 37,
-          method: "tools/call",
-          params: { name: "recipeDraft.recalculate", arguments: { draftId: "draft_123" } },
-        },
-      },
-      recipeDraftFromRecipe: {
-        summary: "Clone or get draft from recipe",
-        value: {
-          jsonrpc: "2.0",
-          id: 50,
-          method: "tools/call",
-          params: {
-            name: "recipeDraft.fromRecipe",
-            arguments: { recipeId: "rec_123", clientRequestId: "req-clone-1" },
           },
         },
       },
@@ -275,6 +126,27 @@ export class McpController {
           params: { name: "recipe.get", arguments: { recipeId: "rec_123" } },
         },
       },
+      mealPlanDayGet: {
+        summary: "Get day meal plan",
+        value: {
+          jsonrpc: "2.0",
+          id: 50,
+          method: "tools/call",
+          params: { name: "mealPlan.dayGet", arguments: { date: "2026-02-20" } },
+        },
+      },
+      mealPlanAddEntry: {
+        summary: "Add meal entry",
+        value: {
+          jsonrpc: "2.0",
+          id: 51,
+          method: "tools/call",
+          params: {
+            name: "mealPlan.addEntry",
+            arguments: { slot: "BREAKFAST", productId: "prod_123", amount: 150, unit: "g" },
+          },
+        },
+      },
     },
   })
   async handleMcp(
@@ -286,7 +158,6 @@ export class McpController {
     return this.handleJsonRpc(body, headers, req.user, requestId);
   }
 
-  // Core JSON-RPC router for MCP methods.
   private async handleJsonRpc(
     body: unknown,
     headers: Record<string, string | string[] | undefined>,
@@ -367,6 +238,28 @@ export class McpController {
       const msg = error.message || "Error";
       console.warn(`[${requestId}] ${msg}`, error.data);
       const result = buildMcpErrorResult(msg, { requestId, code: error.code }, error.data);
+      return { jsonrpc: "2.0", id, result };
+    }
+
+    if (error instanceof HttpException) {
+      const status = error.getStatus();
+      const payload = error.getResponse();
+      const message =
+        typeof payload === "string"
+          ? payload
+          : Array.isArray((payload as Record<string, unknown>).message)
+            ? ((payload as Record<string, unknown>).message as string[]).join("; ")
+            : (((payload as Record<string, unknown>).message as string) ?? error.message);
+      const code =
+        status === 401
+          ? "AUTH_REQUIRED"
+          : status === 404
+            ? "NOT_FOUND"
+            : status === 400
+              ? "BAD_REQUEST"
+              : "HTTP_ERROR";
+      const data = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : undefined;
+      const result = buildMcpErrorResult(message, { requestId, code: status }, { code, ...(data ?? {}) });
       return { jsonrpc: "2.0", id, result };
     }
 

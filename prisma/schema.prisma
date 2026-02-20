@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets = ["native"]
 }
 
 datasource db {
@@ -22,11 +22,6 @@ enum ProductSource {
   INTERNAL
   FATSECRET
   AI_ESTIMATED
-}
-
-enum RecipeStatus {
-  DRAFT
-  PUBLISHED
 }
 
 enum RecipeVisibility {
@@ -52,11 +47,24 @@ enum GoalType {
   GAIN
 }
 
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum MealEntryType {
+  PRODUCT
+  RECIPE
+}
+
 model User {
   id         String       @id @default(cuid())
   externalId String       @unique
   createdAt  DateTime     @default(now())
   profile    UserProfile?
+  mealPlanDays MealPlanDay[]
 }
 
 model UserProfile {
@@ -100,65 +108,10 @@ model Product {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  recipeDraftIngredients RecipeDraftIngredient[]
   recipeIngredients      RecipeIngredient[]
+  mealPlanEntries        MealPlanEntry[]
 
   @@index([normalizedName])
-}
-
-model RecipeDraft {
-  id          String       @id @default(cuid())
-  ownerUserId String?
-  title       String
-  category    String?
-  description String?
-  servings    Int?
-  status      RecipeStatus @default(DRAFT)
-  sourceRecipeId String?
-
-  ingredients RecipeDraftIngredient[]
-  steps       RecipeDraftStep[]
-  sourceRecipe Recipe? @relation("RecipeDraftSource", fields: [sourceRecipeId], references: [id])
-
-  nutritionTotal      Json?
-  nutritionPerServing Json?
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model RecipeDraftIngredient {
-  id           String      @id @default(cuid())
-  draftId      String
-  draft        RecipeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
-
-  order        Int
-  originalText String?
-  name         String
-  amount       Float?
-  unit         String?
-
-  productId   String?
-  product     Product? @relation(fields: [productId], references: [id])
-
-  kcal100     Float?
-  protein100  Float?
-  fat100      Float?
-  carbs100    Float?
-
-  assumptions Json?
-  createdAt   DateTime @default(now())
-
-  @@unique([draftId, order])
-}
-
-model RecipeDraftStep {
-  id      String      @id @default(cuid())
-  draftId String
-  draft   RecipeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
-
-  order   Int
-  text    String
 }
 
 model Recipe {
@@ -172,7 +125,7 @@ model Recipe {
 
   ingredients RecipeIngredient[]
   steps       RecipeStep[]
-  drafts      RecipeDraft[] @relation("RecipeDraftSource")
+  mealPlanEntries MealPlanEntry[]
 
   nutritionTotal      Json?
   nutritionPerServing Json?
@@ -223,4 +176,42 @@ model IdempotencyKey {
   createdAt DateTime @default(now())
 
   @@unique([operation, key, entityId])
+}
+
+model MealPlanDay {
+  id             String        @id @default(cuid())
+  ownerUserId    String
+  owner          User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  date           DateTime
+  nutritionBySlot Json?
+  nutritionTotal  Json?
+  entries        MealPlanEntry[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([ownerUserId, date])
+}
+
+model MealPlanEntry {
+  id            String        @id @default(cuid())
+  dayId         String
+  day           MealPlanDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  slot          MealSlot
+  entryType     MealEntryType
+  order         Int
+
+  productId     String?
+  product       Product?      @relation(fields: [productId], references: [id])
+  recipeId      String?
+  recipe        Recipe?       @relation(fields: [recipeId], references: [id])
+
+  amount        Float?
+  unit          String?
+  servings      Float?
+  nutritionTotal Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([dayId, slot])
+  @@unique([dayId, slot, order])
 }

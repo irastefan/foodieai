@@ -1,4 +1,4 @@
-import assert from "assert";
+import * as assert from "assert";
 import { jsonToTextContent } from "../src/mcp/mcp.content";
 
 const payload = { user: { id: "u1" }, profile: null };
