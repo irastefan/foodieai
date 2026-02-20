@@ -47,8 +47,11 @@ export class MealPlansService {
       const nextOrder = await this.nextOrderInSlotTx(tx as any, day.id, slot);
 
       if (mode === "product") {
-        const product = await tx.product.findUnique({
-          where: { id: dto.productId as string },
+        const product = await tx.product.findFirst({
+          where: {
+            id: dto.productId as string,
+            OR: [{ scope: "GLOBAL" }, { ownerUserId: userId }],
+          },
           select: {
             id: true,
             kcal100: true,
@@ -86,8 +89,11 @@ export class MealPlansService {
       }
 
       if (mode === "recipe") {
-        const recipe = await tx.recipe.findUnique({
-          where: { id: dto.recipeId as string },
+        const recipe = await tx.recipe.findFirst({
+          where: {
+            id: dto.recipeId as string,
+            OR: [{ visibility: "PUBLIC" }, { ownerUserId: userId }],
+          },
           select: {
             id: true,
             nutritionPerServing: true,

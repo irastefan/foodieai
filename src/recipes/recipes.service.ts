@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { RecipeVisibility } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto";
@@ -7,14 +13,17 @@ import { UpdateRecipeDto } from "./dto/update-recipe.dto";
 export class RecipesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateRecipeDto) {
+  async create(ownerUserId: string, dto: CreateRecipeDto) {
     if (dto.ingredients.length === 0) {
       throw new BadRequestException("ingredients must not be empty");
     }
 
     const productIds = [...new Set(dto.ingredients.map((ingredient) => ingredient.productId))];
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: {
+        id: { in: productIds },
+        OR: [{ scope: "GLOBAL" }, { ownerUserId }],
+      },
       select: {
         id: true,
         name: true,
@@ -52,10 +61,12 @@ export class RecipesService {
 
     return this.prisma.recipe.create({
       data: {
+        ownerUserId,
         title: dto.title,
         category: dto.category ?? null,
         description: dto.description ?? null,
         servings: dto.servings ?? null,
+        visibility: dto.isPublic ? RecipeVisibility.PUBLIC : RecipeVisibility.PRIVATE,
         nutritionTotal: nutrition.total as any,
         nutritionPerServing: nutrition.perServing as any,
         ingredients: {
@@ -92,18 +103,26 @@ export class RecipesService {
     });
   }
 
-  async search(query?: string | null, category?: string | null, limit?: number | null) {
+  async search(userId?: string, query?: string | null, category?: string | null, limit?: number | null) {
     const take = limit && limit > 0 ? Math.min(limit, 50) : 20;
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      OR: userId
+        ? [{ visibility: "PUBLIC" }, { ownerUserId: userId }]
+        : [{ visibility: "PUBLIC" }],
+    };
 
     if (category) {
       where.category = category;
     }
 
     if (query) {
-      where.OR = [
-        { title: { contains: query, mode: "insensitive" } },
-        { description: { contains: query, mode: "insensitive" } },
+      where.AND = [
+        {
+          OR: [
+            { title: { contains: query, mode: "insensitive" } },
+            { description: { contains: query, mode: "insensitive" } },
+          ],
+        },
       ];
     }
 
@@ -115,14 +134,20 @@ export class RecipesService {
         id: true,
         title: true,
         category: true,
+        visibility: true,
         updatedAt: true,
       },
     });
   }
 
-  async get(recipeId: string) {
-    const recipe = await this.prisma.recipe.findUnique({
-      where: { id: recipeId },
+  async get(recipeId: string, userId?: string) {
+    const recipe = await this.prisma.recipe.findFirst({
+      where: {
+        id: recipeId,
+        OR: userId
+          ? [{ visibility: "PUBLIC" }, { ownerUserId: userId }]
+          : [{ visibility: "PUBLIC" }],
+      },
       include: {
         ingredients: { orderBy: { order: "asc" } },
         steps: { orderBy: { order: "asc" } },
@@ -140,7 +165,7 @@ export class RecipesService {
     return recipe;
   }
 
-  async update(recipeId: string, dto: UpdateRecipeDto) {
+  async update(ownerUserId: string, recipeId: string, dto: UpdateRecipeDto) {
     const existing = await this.prisma.recipe.findUnique({
       where: { id: recipeId },
       include: {
@@ -152,6 +177,13 @@ export class RecipesService {
       throw new NotFoundException({
         code: "RECIPE_NOT_FOUND",
         message: "Recipe not found",
+        recipeId,
+      });
+    }
+    if (existing.ownerUserId !== ownerUserId) {
+      throw new ForbiddenException({
+        code: "RECIPE_FORBIDDEN",
+        message: "You can modify only your own recipes",
         recipeId,
       });
     }
@@ -176,7 +208,10 @@ export class RecipesService {
     if (ingredientsInput) {
       const productIds = [...new Set(ingredientsInput.map((ingredient) => ingredient.productId))];
       const products = await this.prisma.product.findMany({
-        where: { id: { in: productIds } },
+        where: {
+          id: { in: productIds },
+          OR: [{ scope: "GLOBAL" }, { ownerUserId }],
+        },
         select: {
           id: true,
           name: true,
@@ -246,6 +281,11 @@ export class RecipesService {
           category: dto.category === undefined ? undefined : dto.category,
           description: dto.description === undefined ? undefined : dto.description,
           servings: dto.servings === undefined ? undefined : dto.servings,
+          visibility: dto.isPublic === undefined
+            ? undefined
+            : dto.isPublic
+              ? RecipeVisibility.PUBLIC
+              : RecipeVisibility.PRIVATE,
           nutritionTotal: nutrition.total as any,
           nutritionPerServing: nutrition.perServing as any,
         } as any,
@@ -285,15 +325,25 @@ export class RecipesService {
       }
     });
 
-    return this.get(recipeId);
+    return this.get(recipeId, ownerUserId);
   }
 
-  async remove(recipeId: string) {
-    const existing = await this.prisma.recipe.findUnique({ where: { id: recipeId }, select: { id: true } });
+  async remove(ownerUserId: string, recipeId: string) {
+    const existing = await this.prisma.recipe.findUnique({
+      where: { id: recipeId },
+      select: { id: true, ownerUserId: true },
+    });
     if (!existing) {
       throw new NotFoundException({
         code: "RECIPE_NOT_FOUND",
         message: "Recipe not found",
+        recipeId,
+      });
+    }
+    if (existing.ownerUserId !== ownerUserId) {
+      throw new ForbiddenException({
+        code: "RECIPE_FORBIDDEN",
+        message: "You can delete only your own recipes",
         recipeId,
       });
     }

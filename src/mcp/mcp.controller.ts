@@ -168,7 +168,7 @@ export class McpController {
   })
   async handleMcp(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: Request & { user?: { userId: string; externalId: string } },
+    @Req() req: Request & { user?: { userId: string; email?: string } },
     @Body() body: unknown,
   ) {
     const requestId = newRequestId();
@@ -178,7 +178,7 @@ export class McpController {
   private async handleJsonRpc(
     body: unknown,
     headers: Record<string, string | string[] | undefined>,
-    user: { userId: string; externalId: string } | undefined,
+    user: { userId: string; email?: string } | undefined,
     requestId: string,
   ) {
     const id = this.extractId(body);
@@ -230,7 +230,9 @@ export class McpController {
       }
 
       try {
-        const userId = toolDef.auth === "required" ? await this.resolveUserId(headers) : user?.userId;
+        const userId = toolDef.auth === "required"
+          ? await this.authContext.getUserId(headers)
+          : (await this.authContext.getOptionalUserId(headers)) ?? user?.userId;
         const payload = await this.mcpService.executeTool(
           params.name,
           params.arguments as Record<string, unknown>,
@@ -339,15 +341,4 @@ export class McpController {
     };
   }
 
-  private async resolveUserId(
-    headers: Record<string, string | string[] | undefined>,
-  ) {
-    const authHeader = headers["authorization"];
-    const value = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-    if (value && value.startsWith("Bearer ")) {
-      return this.authContext.getOrCreateUserId(headers);
-    }
-    const devSub = process.env.DEV_AUTH_BYPASS_SUB || "dev-user";
-    return this.authContext.getOrCreateByExternalId(devSub);
-  }
 }

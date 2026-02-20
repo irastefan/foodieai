@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
-import { ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { AddShoppingCategoryDto } from "./dto/add-shopping-category.dto";
 import { AddShoppingItemDto, SetShoppingItemStateDto } from "./dto/add-shopping-item.dto";
@@ -9,6 +9,7 @@ import { ShoppingListService } from "./shopping-list.service";
 import { UpdateShoppingCategoryDto } from "./dto/update-shopping-category.dto";
 
 @ApiTags("shopping-list")
+@ApiBearerAuth("bearer")
 @Controller("v1/shopping-list")
 export class ShoppingListController {
   constructor(
@@ -31,7 +32,7 @@ export class ShoppingListController {
     },
   })
   async getList(@Headers() headers: Record<string, string | string[] | undefined>) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.getList(userId);
   }
 
@@ -51,7 +52,7 @@ export class ShoppingListController {
     },
   })
   async listCategories(@Headers() headers: Record<string, string | string[] | undefined>) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.listCategories(userId);
   }
 
@@ -80,7 +81,7 @@ export class ShoppingListController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() dto: AddShoppingCategoryDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.addCategory(userId, dto);
   }
 
@@ -111,7 +112,7 @@ export class ShoppingListController {
     @Param() params: ShoppingCategoryIdDto,
     @Body() dto: UpdateShoppingCategoryDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.updateCategory(userId, params.categoryId, dto);
   }
 
@@ -135,7 +136,7 @@ export class ShoppingListController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingCategoryIdDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.removeCategory(userId, params.categoryId);
   }
 
@@ -176,7 +177,7 @@ export class ShoppingListController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body() dto: AddShoppingItemDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.addItem(userId, dto);
   }
 
@@ -213,7 +214,7 @@ export class ShoppingListController {
     @Param() params: ShoppingItemIdDto,
     @Body() dto: SetShoppingItemStateDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.setItemState(userId, params.itemId, dto.isDone);
   }
 
@@ -236,19 +237,8 @@ export class ShoppingListController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Param() params: ShoppingItemIdDto,
   ) {
-    const userId = await this.resolveUserId(headers);
+    const userId = await this.authContext.getUserId(headers);
     return this.shoppingListService.removeItem(userId, params.itemId);
   }
 
-  private async resolveUserId(
-    headers: Record<string, string | string[] | undefined>,
-  ) {
-    const authHeader = headers["authorization"];
-    const value = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-    if (value && value.startsWith("Bearer ")) {
-      return this.authContext.getOrCreateUserId(headers);
-    }
-    const devSub = process.env.DEV_AUTH_BYPASS_SUB || "dev-user";
-    return this.authContext.getOrCreateByExternalId(devSub);
-  }
 }

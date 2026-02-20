@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsInt, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from "class-validator";
 
 class CreateRecipeIngredientDto {
   @ApiProperty({ example: "prod_egg" })
@@ -40,6 +48,14 @@ export class CreateRecipeDto {
   @IsOptional()
   @IsInt()
   servings?: number | null;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: "If true, recipe is visible to all users",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 
   @ApiProperty({ type: [CreateRecipeIngredientDto] })
   @IsArray()

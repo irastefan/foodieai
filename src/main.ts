@@ -24,6 +24,15 @@ async function bootstrap() {
     .setTitle("FoodieAI API")
     .setDescription("FoodieAI backend API")
     .setVersion("1.0.0")
+    .addBearerAuth(
+      {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        in: "header",
+      },
+      "bearer",
+    )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup("docs", app, swaggerDocument);

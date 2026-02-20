@@ -465,7 +465,7 @@ export class McpService {
         description:
           "Create a product manually.\nUse when user provides nutrition per 100g.\nReturns productId and product.",
         tags: ["products"],
-        auth: "none",
+        auth: "required",
         public: false,
         inputSchema: {
           type: "object",
@@ -477,6 +477,7 @@ export class McpService {
             protein100: { type: "number" },
             fat100: { type: "number" },
             carbs100: { type: "number" },
+            isPublic: { type: "boolean" },
           },
           required: ["name", "kcal100", "protein100", "fat100", "carbs100"],
         },
@@ -506,8 +507,8 @@ export class McpService {
           },
         ],
         dtoClass: CreateProductDto,
-        handler: async (args) => {
-          const product = await this.createManual(args);
+        handler: async (args, context) => {
+          const product = await this.createManual(context.userId as string, args);
           return {
             text: `✅ Product created: ${product.name}`,
             json: { productId: product.id, product },
@@ -517,7 +518,7 @@ export class McpService {
       "product.search": {
         name: "product.search",
         description:
-          "Search products by name/brand.\nUse when looking up nutrition for an ingredient.\nReturns list of products.",
+          "Search products by name/brand.\nReturns public products, plus your own private products when authenticated.",
         tags: ["products", "search"],
         auth: "none",
         public: true,
@@ -548,7 +549,7 @@ export class McpService {
           },
         ],
         handler: async (args, context) => {
-          const results = await this.search(args);
+          const results = await this.search(context.userId, args);
           return {
             text: `✅ Products found: ${results.length}`,
             json: { count: results.length, items: results },
@@ -972,6 +973,7 @@ export class McpService {
             category: { type: ["string", "null"] },
             description: { type: ["string", "null"] },
             servings: { type: ["number", "null"] },
+            isPublic: { type: "boolean" },
             ingredients: {
               type: "array",
               items: {
@@ -1024,8 +1026,8 @@ export class McpService {
           },
         ],
         dtoClass: CreateRecipeDto,
-        handler: async (args) => {
-          const recipe = await this.createRecipe(args);
+        handler: async (args, context) => {
+          const recipe = await this.createRecipe(context.userId as string, args);
           return {
             text: `✅ Recipe created: ${recipe.title}`,
             json: { recipeId: recipe.id, recipe },
@@ -1035,7 +1037,7 @@ export class McpService {
       "recipe.search": {
         name: "recipe.search",
         description:
-          "Search published recipes.\nUse when user asks for ideas or existing recipes.\nReturns recipe list.",
+          "Search recipes.\nReturns public recipes, plus your private recipes when authenticated.",
         tags: ["recipes"],
         auth: "none",
         public: true,
@@ -1068,8 +1070,8 @@ export class McpService {
           },
         ],
         dtoClass: SearchRecipesDto,
-        handler: async (args) => {
-          const recipes = await this.searchRecipes(args);
+        handler: async (args, context) => {
+          const recipes = await this.searchRecipes(context.userId, args);
           return {
             text: `✅ Recipes found: ${recipes.length}`,
             json: recipes,
@@ -1079,7 +1081,7 @@ export class McpService {
       "recipe.get": {
         name: "recipe.get",
         description:
-          "Get recipe by id.\nUse after search or create.\nReturns recipe with ingredients and steps.",
+          "Get recipe by id.\nReturns public recipe, or private one if owned by current user.",
         tags: ["recipes"],
         auth: "none",
         public: true,
@@ -1103,9 +1105,9 @@ export class McpService {
           },
         ],
         dtoClass: RecipeIdDto,
-        handler: async (args) => {
+        handler: async (args, context) => {
           try {
-            const recipe = await this.getRecipe(args);
+            const recipe = await this.getRecipe(context.userId, args);
             return {
               text: `✅ Recipe loaded: ${recipe.title}`,
               json: { recipeId: recipe.id, recipe },
@@ -1121,7 +1123,7 @@ export class McpService {
     };
   }
 
-  async createManual(args: Record<string, unknown>) {
+  async createManual(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateDto(CreateProductDto, args);
     const signature = this.createSignature(dto);
     const cached = this.recentCreates.get(signature);
@@ -1129,7 +1131,7 @@ export class McpService {
       return cached.product;
     }
 
-    const product = await this.productsService.createManual(dto);
+    const product = await this.productsService.createManual(userId, dto);
     this.recentCreates.set(signature, {
       expiresAt: Date.now() + 30_000,
       product,
@@ -1137,9 +1139,9 @@ export class McpService {
     return product;
   }
 
-  async search(args: Record<string, unknown>) {
+  async search(userId: string | undefined, args: Record<string, unknown>) {
     const query = typeof args.query === "string" ? args.query : undefined;
-    return this.productsService.search(query);
+    return this.productsService.search(userId, query);
   }
 
   async userMe(userId: string) {
@@ -1195,19 +1197,19 @@ export class McpService {
     return this.shoppingListService.removeItem(userId, dto.itemId);
   }
 
-  async createRecipe(args: Record<string, unknown>) {
+  async createRecipe(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateDto(CreateRecipeDto, args);
-    return this.recipesService.create(dto);
+    return this.recipesService.create(userId, dto);
   }
 
-  async searchRecipes(args: Record<string, unknown>) {
+  async searchRecipes(userId: string | undefined, args: Record<string, unknown>) {
     const dto = await this.validateDto(SearchRecipesDto, args);
-    return this.recipesService.search(dto.query, dto.category, dto.limit);
+    return this.recipesService.search(userId, dto.query, dto.category, dto.limit);
   }
 
-  async getRecipe(args: Record<string, unknown>) {
+  async getRecipe(userId: string | undefined, args: Record<string, unknown>) {
     const dto = await this.validateDto(RecipeIdDto, args);
-    return this.recipesService.get(dto.recipeId);
+    return this.recipesService.get(dto.recipeId, userId);
   }
 
   private async validateDto<T extends object>(

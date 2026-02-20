@@ -1,29 +1,36 @@
-import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { UsersService } from "../users/users.service";
+import { AuthService } from "./auth.service";
 
 @Injectable()
 export class AuthContextService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
-  async getOrCreateUserId(headers: Record<string, string | string[] | undefined>) {
-    this.logAuthPresence(headers);
+  async getUserId(headers: Record<string, string | string[] | undefined>) {
     const token = this.extractBearerToken(headers);
-    const subject = this.resolveSubject(token);
-    const user = await this.usersService.getOrCreateByExternalId(subject);
+    const payload = this.authService.verifyAccessToken(token);
+    const user = await this.usersService.getById(payload.userId);
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
     return user.id;
   }
 
-  async getOrCreateByExternalId(externalId: string) {
-    const user = await this.usersService.getOrCreateByExternalId(externalId);
-    return user.id;
+  async getOptionalUserId(headers: Record<string, string | string[] | undefined>) {
+    const raw = headers["authorization"];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (!value) {
+      return undefined;
+    }
+    return this.getUserId(headers);
   }
 
   private extractBearerToken(headers: Record<string, string | string[] | undefined>) {
     const raw = headers["authorization"];
     const value = Array.isArray(raw) ? raw[0] : raw;
-    if (!value && process.env.DEV_AUTH_BYPASS_SUB) {
-      return "";
-    }
     if (!value || !value.startsWith("Bearer ")) {
       throw new UnauthorizedException("Missing Bearer token");
     }
@@ -32,51 +39,5 @@ export class AuthContextService {
       throw new UnauthorizedException("Missing Bearer token");
     }
     return token;
-  }
-
-  private resolveSubject(token: string) {
-    if (!token && process.env.DEV_AUTH_BYPASS_SUB) {
-      return process.env.DEV_AUTH_BYPASS_SUB;
-    }
-
-    const jwtSubject = this.tryDecodeJwtSubject(token);
-    if (jwtSubject) {
-      return jwtSubject;
-    }
-
-    if (process.env.DEV_AUTH_BYPASS_SUB) {
-      return process.env.DEV_AUTH_BYPASS_SUB;
-    }
-    throw new UnauthorizedException("Invalid access token");
-  }
-
-  private tryDecodeJwtSubject(token: string) {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      return null;
-    }
-    try {
-      const payload = this.base64UrlDecode(parts[1]);
-      const parsed = JSON.parse(payload) as { sub?: unknown };
-      if (typeof parsed.sub === "string" && parsed.sub.length > 0) {
-        return parsed.sub;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  private base64UrlDecode(input: string) {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-    const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-    return Buffer.from(normalized + pad, "base64").toString("utf8");
-  }
-
-  private logAuthPresence(headers: Record<string, string | string[] | undefined>) {
-    const raw = headers["authorization"];
-    const value = Array.isArray(raw) ? raw[0] : raw;
-    const hasAuth = Boolean(value);
-    Logger.log(`MCP auth header present: ${hasAuth}`, AuthContextService.name);
   }
 }

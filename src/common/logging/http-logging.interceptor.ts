@@ -65,16 +65,18 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       }
       if (typeof val === "object" && val !== null) {
         const record = val as Record<string, unknown>;
-        for (const key of Object.keys(record)) {
+        const copy: Record<string, unknown> = { ...record };
+        for (const key of Object.keys(copy)) {
           const lower = key.toLowerCase();
           if (
             lower.includes("token") ||
             lower === "password" ||
             lower === "authorization"
           ) {
-            record[key] = "[redacted]";
+            copy[key] = "[redacted]";
           }
         }
+        return copy;
       }
       return val;
     };

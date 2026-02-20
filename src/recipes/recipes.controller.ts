@@ -1,5 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
   ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
@@ -9,6 +20,7 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { AuthContextService } from "../auth/auth-context.service";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { RecipeIdDto } from "./dto/recipe-id.dto";
 import { SearchRecipesDto } from "./dto/search-recipes.dto";
@@ -18,22 +30,27 @@ import { RecipesService } from "./recipes.service";
 @ApiTags("recipes")
 @Controller("v1/recipes")
 export class RecipesController {
-  constructor(private readonly recipesService: RecipesService) {}
+  constructor(
+    private readonly recipesService: RecipesService,
+    private readonly authContext: AuthContextService,
+  ) {}
 
+  @ApiBearerAuth("bearer")
   @Post()
   @ApiOperation({
     summary: "Create recipe",
-    description: "Creates a recipe in one request with ingredients linked to products.",
+    description: "Creates a user-owned recipe with ingredients linked to accessible products.",
   })
   @ApiBody({
     type: CreateRecipeDto,
     examples: {
       create: {
-        summary: "Create in one call",
+        summary: "Create recipe",
         value: {
           title: "Omelette",
           category: "breakfast",
           servings: 2,
+          isPublic: false,
           ingredients: [
             { productId: "prod_egg", amount: 120, unit: "g" },
             { productId: "prod_butter", amount: 10, unit: "g" },
@@ -43,82 +60,52 @@ export class RecipesController {
       },
     },
   })
-  @ApiCreatedResponse({
-    description: "Created recipe",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", example: "rec_123" },
-        title: { type: "string", example: "Omelette" },
-        category: { type: "string", nullable: true, example: "breakfast" },
-        servings: { type: "number", nullable: true, example: 2 },
-        ingredients: { type: "array", items: { type: "object" } },
-        steps: { type: "array", items: { type: "object" } },
-      },
-    },
-  })
-  async create(@Body() dto: CreateRecipeDto) {
-    return this.recipesService.create(dto);
+  @ApiCreatedResponse({ description: "Created recipe" })
+  async create(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body() dto: CreateRecipeDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.recipesService.create(userId, dto);
   }
 
   @Get()
   @ApiOperation({
     summary: "Search recipes",
-    description: "Search by title/description and optional category.",
+    description: "Returns public recipes and your private recipes when Bearer token is provided.",
   })
   @ApiQuery({ name: "query", required: false, example: "omelette" })
   @ApiQuery({ name: "category", required: false, example: "breakfast" })
   @ApiQuery({ name: "limit", required: false, example: 5 })
-  @ApiOkResponse({
-    description: "Recipe search result",
-    schema: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string", example: "rec_123" },
-          title: { type: "string", example: "Omelette" },
-          category: { type: "string", nullable: true, example: "breakfast" },
-          updatedAt: { type: "string", format: "date-time" },
-        },
-      },
-    },
-  })
-  async search(@Query() dto: SearchRecipesDto) {
-    return this.recipesService.search(dto.query, dto.category, dto.limit);
+  @ApiOkResponse({ description: "Recipe search result" })
+  async search(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() dto: SearchRecipesDto,
+  ) {
+    const userId = await this.authContext.getOptionalUserId(headers);
+    return this.recipesService.search(userId, dto.query, dto.category, dto.limit);
   }
 
   @Get(":recipeId")
   @ApiOperation({
     summary: "Get recipe",
-    description: "Returns recipe with ingredients and steps.",
+    description: "Returns recipe with ingredients and steps if public or owned by current user.",
   })
   @ApiParam({ name: "recipeId", example: "rec_123" })
-  @ApiOkResponse({
-    description: "Recipe details",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", example: "rec_123" },
-        title: { type: "string", example: "Omelette" },
-        category: { type: "string", nullable: true, example: "breakfast" },
-        description: { type: "string", nullable: true, example: "Quick breakfast" },
-        servings: { type: "number", nullable: true, example: 2 },
-        ingredients: { type: "array", items: { type: "object" } },
-        steps: { type: "array", items: { type: "object" } },
-        nutritionTotal: { type: "object", nullable: true },
-        nutritionPerServing: { type: "object", nullable: true },
-      },
-    },
-  })
-  async get(@Param() params: RecipeIdDto) {
-    return this.recipesService.get(params.recipeId);
+  @ApiOkResponse({ description: "Recipe details" })
+  async get(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: RecipeIdDto,
+  ) {
+    const userId = await this.authContext.getOptionalUserId(headers);
+    return this.recipesService.get(params.recipeId, userId);
   }
 
+  @ApiBearerAuth("bearer")
   @Patch(":recipeId")
   @ApiOperation({
     summary: "Update recipe",
-    description: "Updates recipe fields. ingredients/steps are replaced only when provided.",
+    description: "Updates recipe fields. Only owner can update.",
   })
   @ApiParam({ name: "recipeId", example: "rec_123" })
   @ApiBody({
@@ -126,7 +113,7 @@ export class RecipesController {
     examples: {
       patchMeta: {
         summary: "Update title and servings",
-        value: { title: "Omelette v2", servings: 3 },
+        value: { title: "Omelette v2", servings: 3, isPublic: true },
       },
       replaceIngredientsAndSteps: {
         summary: "Replace ingredients and steps",
@@ -140,26 +127,21 @@ export class RecipesController {
       },
     },
   })
-  @ApiOkResponse({
-    description: "Updated recipe",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", example: "rec_123" },
-        title: { type: "string", example: "Omelette v2" },
-        ingredients: { type: "array", items: { type: "object" } },
-        steps: { type: "array", items: { type: "object" } },
-      },
-    },
-  })
-  async update(@Param() params: RecipeIdDto, @Body() dto: UpdateRecipeDto) {
-    return this.recipesService.update(params.recipeId, dto);
+  @ApiOkResponse({ description: "Updated recipe" })
+  async update(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: RecipeIdDto,
+    @Body() dto: UpdateRecipeDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.recipesService.update(userId, params.recipeId, dto);
   }
 
+  @ApiBearerAuth("bearer")
   @Delete(":recipeId")
   @ApiOperation({
     summary: "Delete recipe",
-    description: "Deletes recipe by id.",
+    description: "Deletes recipe by id. Only owner can delete.",
   })
   @ApiParam({ name: "recipeId", example: "rec_123" })
   @ApiResponse({
@@ -173,7 +155,11 @@ export class RecipesController {
       },
     },
   })
-  async remove(@Param() params: RecipeIdDto) {
-    return this.recipesService.remove(params.recipeId);
+  async remove(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: RecipeIdDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.recipesService.remove(userId, params.recipeId);
   }
 }

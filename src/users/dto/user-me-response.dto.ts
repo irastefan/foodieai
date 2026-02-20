@@ -5,8 +5,8 @@ export class UserMeResponseDto {
   @ApiProperty({ example: "user_123" })
   id!: string;
 
-  @ApiProperty({ example: "dev-user" })
-  externalId!: string;
+  @ApiProperty({ example: "ira@example.com" })
+  email!: string;
 
   @ApiPropertyOptional({ type: UserProfileResponseDto, nullable: true })
   profile!: UserProfileResponseDto | null;

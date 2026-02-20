@@ -30,26 +30,35 @@ export class MissingFieldsError extends BadRequestException {
 
 @Injectable()
 export class UsersService {
-  // User and profile persistence + target recalculation.
   constructor(
     private readonly prisma: PrismaService,
     private readonly tdeeService: TdeeService,
   ) {}
 
-  async getOrCreateByExternalId(externalId: string) {
-    const existing = await this.prisma.user.findUnique({
-      where: { externalId },
-    });
-    if (existing) {
-      return existing;
-    }
-    return this.prisma.user.create({
-      data: { externalId },
+  async createWithEmail(email: string, passwordHash: string) {
+    return (this.prisma as any).user.create({
+      data: {
+        email,
+        passwordHash,
+        externalId: email,
+      },
+      select: { id: true, email: true },
     });
   }
 
+  async findByEmail(email: string) {
+    return (this.prisma as any).user.findUnique({
+      where: { email },
+      select: { id: true, email: true, passwordHash: true },
+    });
+  }
+
+  async getById(userId: string) {
+    return (this.prisma as any).user.findUnique({ where: { id: userId } });
+  }
+
   async getUserWithProfile(userId: string) {
-    return this.prisma.user.findUnique({
+    return (this.prisma as any).user.findUnique({
       where: { id: userId },
       include: { profile: true },
     });
@@ -67,7 +76,7 @@ export class UsersService {
       throw new BadRequestException("weightKg must be > 0");
     }
 
-    const profile = await this.prisma.userProfile.upsert({
+    const profile = await (this.prisma as any).userProfile.upsert({
       where: { userId },
       create: {
         userId,
@@ -94,14 +103,11 @@ export class UsersService {
       },
     });
 
-    const updated = await this.recalculateIfPossible(userId, profile);
-    return updated;
+    return this.recalculateIfPossible(userId, profile);
   }
 
   async recalculateTargets(userId: string) {
-    const profile = await this.prisma.userProfile.findUnique({
-      where: { userId },
-    });
+    const profile = await (this.prisma as any).userProfile.findUnique({ where: { userId } });
     if (!profile) {
       throw new MissingFieldsError([
         "sex",
@@ -132,7 +138,7 @@ export class UsersService {
       if (requireAll) {
         throw new MissingFieldsError(missingFields);
       }
-      return this.prisma.userProfile.findUnique({ where: { userId } });
+      return (this.prisma as any).userProfile.findUnique({ where: { userId } });
     }
 
     const targets = this.tdeeService.calculateTargets({
@@ -145,7 +151,7 @@ export class UsersService {
       calorieDelta: profile.calorieDelta ?? undefined,
     });
 
-    await this.prisma.userProfile.update({
+    await (this.prisma as any).userProfile.update({
       where: { userId },
       data: {
         targetCalories: targets.targetCalories,
@@ -155,7 +161,7 @@ export class UsersService {
       },
     });
 
-    return this.prisma.userProfile.findUnique({ where: { userId } });
+    return (this.prisma as any).userProfile.findUnique({ where: { userId } });
   }
 
   private getMissingFields(profile: {

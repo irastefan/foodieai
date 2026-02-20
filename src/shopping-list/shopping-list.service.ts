@@ -147,8 +147,11 @@ export class ShoppingListService {
     let customName: string | null = null;
 
     if (mode === "product") {
-      const product = await this.prisma.product.findUnique({
-        where: { id: dto.productId as string },
+      const product = await this.prisma.product.findFirst({
+        where: {
+          id: dto.productId as string,
+          OR: [{ scope: "GLOBAL" }, { ownerUserId: userId }],
+        },
         select: { id: true },
       });
       if (!product) {

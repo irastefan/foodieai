@@ -60,13 +60,17 @@ enum MealEntryType {
 }
 
 model User {
-  id         String       @id @default(cuid())
-  externalId String       @unique
-  createdAt  DateTime     @default(now())
-  profile    UserProfile?
-  mealPlanDays MealPlanDay[]
-  shoppingLists ShoppingList[]
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  passwordHash       String
+  externalId         String?            @unique
+  createdAt          DateTime           @default(now())
+  profile            UserProfile?
+  mealPlanDays       MealPlanDay[]
+  shoppingLists      ShoppingList[]
   shoppingCategories ShoppingCategory[]
+  products           Product[]
+  recipes            Recipe[]
 }
 
 model UserProfile {
@@ -101,7 +105,8 @@ model Product {
   normalizedName String
   scope          ProductScope
   status         ProductStatus
-  ownerUserId    String?
+  ownerUserId    String
+  owner          User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   source         ProductSource
   kcal100        Int
   protein100     Float
@@ -119,7 +124,8 @@ model Product {
 
 model Recipe {
   id          String           @id @default(cuid())
-  ownerUserId String?
+  ownerUserId String
+  owner       User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   title       String
   category    String?
   description String?

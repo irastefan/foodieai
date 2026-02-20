@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpdateProductDto {
   @ApiPropertyOptional({ example: "Greek Yogurt 2%" })
@@ -35,4 +35,12 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   carbs100?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: "If true, product is visible to all users",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 }

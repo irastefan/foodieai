@@ -1,5 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
   ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
@@ -9,6 +20,7 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { AuthContextService } from "../auth/auth-context.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { ProductIdDto } from "./dto/product-id.dto";
 import { SearchProductsDto } from "./dto/search-products.dto";
@@ -18,20 +30,21 @@ import { ProductsService } from "./products.service";
 @ApiTags("products")
 @Controller("v1/products")
 export class ProductsController {
-  // REST endpoints for products (create, search).
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly authContext: AuthContextService,
+  ) {}
 
-  // Create a product manually (MVP).
+  @ApiBearerAuth("bearer")
   @ApiOperation({
     summary: "Create product manually",
-    description:
-      "Creates a product with MVP defaults (GLOBAL, VERIFIED, INTERNAL) and stores nutrition per 100g.",
+    description: "Creates user-owned product and stores nutrition per 100g.",
   })
   @ApiBody({
     type: CreateProductDto,
     examples: {
-      create: {
-        summary: "Manual product",
+      private: {
+        summary: "Private product",
         value: {
           name: "Greek Yogurt",
           brand: "Acme",
@@ -39,64 +52,52 @@ export class ProductsController {
           protein100: 10,
           fat100: 3.5,
           carbs100: 8,
+          isPublic: false,
+        },
+      },
+      public: {
+        summary: "Public product",
+        value: {
+          name: "Whole Milk",
+          kcal100: 61,
+          protein100: 3.2,
+          fat100: 3.3,
+          carbs100: 4.8,
+          isPublic: true,
         },
       },
     },
   })
-  @ApiCreatedResponse({
-    description: "Created product",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", example: "prod_123" },
-        name: { type: "string", example: "Greek Yogurt" },
-        brand: { type: "string", nullable: true, example: "Acme" },
-        kcal100: { type: "number", example: 120 },
-        protein100: { type: "number", example: 10 },
-        fat100: { type: "number", example: 3.5 },
-        carbs100: { type: "number", example: 8 },
-      },
-    },
-  })
+  @ApiCreatedResponse({ description: "Created product" })
   @Post()
-  async createManual(@Body() dto: CreateProductDto) {
-    return this.productsService.createManual(dto);
+  async createManual(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body() dto: CreateProductDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.productsService.createManual(userId, dto);
   }
 
-  // Search products by name/brand.
   @ApiOperation({
     summary: "Search products",
-    description:
-      "Search by name or brand with a simple case-insensitive contains filter.",
+    description: "Returns public products and your own private products when Bearer token is provided.",
   })
   @ApiQuery({ name: "query", required: false, example: "yogurt" })
-  @ApiOkResponse({
-    description: "Matched products",
-    schema: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string", example: "prod_123" },
-          name: { type: "string", example: "Greek Yogurt" },
-          brand: { type: "string", nullable: true, example: "Acme" },
-          kcal100: { type: "number", example: 120 },
-          protein100: { type: "number", example: 10 },
-          fat100: { type: "number", example: 3.5 },
-          carbs100: { type: "number", example: 8 },
-        },
-      },
-    },
-  })
+  @ApiOkResponse({ description: "Matched products" })
   @Get()
-  async search(@Query() dto: SearchProductsDto) {
-    return this.productsService.search(dto.query);
+  async search(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() dto: SearchProductsDto,
+  ) {
+    const userId = await this.authContext.getOptionalUserId(headers);
+    return this.productsService.search(userId, dto.query);
   }
 
+  @ApiBearerAuth("bearer")
   @Patch(":productId")
   @ApiOperation({
     summary: "Update product",
-    description: "Updates mutable product fields.",
+    description: "Updates mutable product fields. Only owner can update.",
   })
   @ApiParam({ name: "productId", example: "prod_123" })
   @ApiBody({
@@ -110,33 +111,26 @@ export class ProductsController {
           protein100: 11,
           fat100: 2.8,
           carbs100: 7.5,
+          isPublic: true,
         },
       },
     },
   })
-  @ApiOkResponse({
-    description: "Updated product",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", example: "prod_123" },
-        name: { type: "string", example: "Greek Yogurt 2%" },
-        brand: { type: "string", nullable: true, example: "Acme" },
-        kcal100: { type: "number", example: 110 },
-        protein100: { type: "number", example: 11 },
-        fat100: { type: "number", example: 2.8 },
-        carbs100: { type: "number", example: 7.5 },
-      },
-    },
-  })
-  async update(@Param() params: ProductIdDto, @Body() dto: UpdateProductDto) {
-    return this.productsService.update(params.productId, dto);
+  @ApiOkResponse({ description: "Updated product" })
+  async update(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: ProductIdDto,
+    @Body() dto: UpdateProductDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.productsService.update(userId, params.productId, dto);
   }
 
+  @ApiBearerAuth("bearer")
   @Delete(":productId")
   @ApiOperation({
     summary: "Delete product",
-    description: "Deletes product if it is not used in recipes/shopping list.",
+    description: "Deletes product if it is not used in recipes/shopping list. Only owner can delete.",
   })
   @ApiParam({ name: "productId", example: "prod_123" })
   @ApiResponse({
@@ -150,7 +144,11 @@ export class ProductsController {
       },
     },
   })
-  async remove(@Param() params: ProductIdDto) {
-    return this.productsService.remove(params.productId);
+  async remove(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Param() params: ProductIdDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.productsService.remove(userId, params.productId);
   }
 }
