@@ -1,10 +1,14 @@
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+RUN apt-get update -y && apt-get install -y openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
+RUN apt-get update -y && apt-get install -y openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY prisma ./prisma
