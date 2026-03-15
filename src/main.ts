@@ -8,6 +8,15 @@ import { HttpLoggingInterceptor } from "./common/logging/http-logging.intercepto
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:5173")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+  });
   app.use(express.urlencoded({ extended: true }));
   app.useGlobalInterceptors(new HttpLoggingInterceptor());
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
