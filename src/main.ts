@@ -8,7 +8,7 @@ import { HttpLoggingInterceptor } from "./common/logging/http-logging.intercepto
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:5173")
+  const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:5173,https://irastefan.github.io")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
