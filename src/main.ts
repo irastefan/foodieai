@@ -47,7 +47,10 @@ async function bootstrap() {
   SwaggerModule.setup("docs", app, swaggerDocument);
 
   const port = Number(process.env.PORT || 8080);
-  await app.listen(port, '0.0.0.0');
+  await app.listen(port, "0.0.0.0");
 }
 
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error("Application bootstrap failed", error);
+  process.exit(1);
+});

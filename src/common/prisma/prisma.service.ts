@@ -6,9 +6,9 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  // Shared Prisma client lifecycle for the app.
   async onModuleInit() {
-    await this.$connect();
+    // Cloud Run expects the HTTP server to bind quickly. Let Prisma connect lazily
+    // on first query instead of blocking the process during boot.
   }
 
   async onModuleDestroy() {
