@@ -50,6 +50,7 @@ export class UsersController {
           weightKg: 63,
           activityLevel: "MODERATE",
           goal: "LOSE",
+          targetFormula: "MIFFLIN_ST_JEOR",
           calorieDelta: -400,
         },
       },

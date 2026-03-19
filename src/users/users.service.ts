@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { ActivityLevel, GoalType, ProductScope, RecipeVisibility, Sex } from "@prisma/client";
+import { ActivityLevel, GoalType, ProductScope, RecipeVisibility, Sex, TargetFormula } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { TdeeService } from "../tdee/tdee.service";
 
@@ -12,6 +12,7 @@ export type UpsertProfileInput = {
   weightKg?: number;
   activityLevel?: ActivityLevel;
   goal?: GoalType;
+  targetFormula?: TargetFormula;
   calorieDelta?: number;
 };
 
@@ -58,10 +59,17 @@ export class UsersService {
   }
 
   async getUserWithProfile(userId: string) {
-    return (this.prisma as any).user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       include: { profile: true },
     });
+    if (!user) {
+      return user;
+    }
+    return {
+      ...user,
+      profile: this.attachProfileMetadata(user.profile),
+    };
   }
 
   async upsertProfile(userId: string, input: UpsertProfileInput) {
@@ -88,6 +96,7 @@ export class UsersService {
         weightKg: input.weightKg ?? null,
         activityLevel: input.activityLevel ?? null,
         goal: input.goal ?? null,
+        targetFormula: input.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
         calorieDelta: input.calorieDelta ?? null,
       },
       update: {
@@ -99,6 +108,7 @@ export class UsersService {
         weightKg: input.weightKg ?? undefined,
         activityLevel: input.activityLevel ?? undefined,
         goal: input.goal ?? undefined,
+        targetFormula: input.targetFormula ?? undefined,
         calorieDelta: input.calorieDelta ?? undefined,
       },
     });
@@ -161,6 +171,7 @@ export class UsersService {
       weightKg: number | null;
       activityLevel: ActivityLevel | null;
       goal: GoalType | null;
+      targetFormula: TargetFormula | null;
       calorieDelta: number | null;
     },
     requireAll = false,
@@ -170,7 +181,9 @@ export class UsersService {
       if (requireAll) {
         throw new MissingFieldsError(missingFields);
       }
-      return (this.prisma as any).userProfile.findUnique({ where: { userId } });
+      return this.attachProfileMetadata(
+        await (this.prisma as any).userProfile.findUnique({ where: { userId } }),
+      );
     }
 
     const targets = this.tdeeService.calculateTargets({
@@ -180,12 +193,14 @@ export class UsersService {
       weightKg: profile.weightKg as number,
       activityLevel: profile.activityLevel as ActivityLevel,
       goal: profile.goal ?? GoalType.MAINTAIN,
+      targetFormula: profile.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
       calorieDelta: profile.calorieDelta ?? undefined,
     });
 
     await (this.prisma as any).userProfile.update({
       where: { userId },
       data: {
+        targetFormula: targets.targetFormula,
         targetCalories: targets.targetCalories,
         targetProteinG: targets.targetProteinG,
         targetFatG: targets.targetFatG,
@@ -193,7 +208,9 @@ export class UsersService {
       },
     });
 
-    return (this.prisma as any).userProfile.findUnique({ where: { userId } });
+    return this.attachProfileMetadata(
+      await (this.prisma as any).userProfile.findUnique({ where: { userId } }),
+    );
   }
 
   private getMissingFields(profile: {
@@ -228,6 +245,19 @@ export class UsersService {
     return date;
   }
 
+  private attachProfileMetadata<T extends { targetFormula?: TargetFormula | null } | null>(
+    profile: T,
+  ) {
+    if (!profile) {
+      return profile;
+    }
+    return {
+      ...profile,
+      targetFormula: profile.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
+      availableTargetFormulas: this.tdeeService.getFormulaOptions(),
+    };
+  }
+
   private async ensureUserExists(userId: string) {
     const exists = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -242,4 +272,3 @@ export class UsersService {
     }
   }
 }
-

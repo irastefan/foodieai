@@ -47,6 +47,13 @@ enum GoalType {
   GAIN
 }
 
+enum TargetFormula {
+  MIFFLIN_ST_JEOR
+  HARRIS_BENEDICT_ORIGINAL
+  HARRIS_BENEDICT_REVISED
+  OWEN
+}
+
 enum MealSlot {
   BREAKFAST
   LUNCH
@@ -87,6 +94,7 @@ model UserProfile {
   weightKg      Float?
   activityLevel ActivityLevel?
   goal          GoalType?      @default(MAINTAIN)
+  targetFormula TargetFormula  @default(MIFFLIN_ST_JEOR)
 
   targetCalories Int?
   targetProteinG Int?

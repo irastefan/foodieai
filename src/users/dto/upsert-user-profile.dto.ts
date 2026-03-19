@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { ActivityLevel, GoalType, Sex } from "@prisma/client";
+import { ActivityLevel, GoalType, Sex, TargetFormula } from "@prisma/client";
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpsertUserProfileDto {
@@ -44,6 +44,11 @@ export class UpsertUserProfileDto {
   @IsOptional()
   @IsEnum(GoalType)
   goal?: GoalType;
+
+  @ApiPropertyOptional({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
+  @IsOptional()
+  @IsEnum(TargetFormula)
+  targetFormula?: TargetFormula;
 
   @ApiPropertyOptional({ example: -400 })
   @IsOptional()

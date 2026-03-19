@@ -1,5 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ActivityLevel, GoalType, Sex } from "@prisma/client";
+import { ActivityLevel, GoalType, Sex, TargetFormula } from "@prisma/client";
+
+class TargetFormulaOptionDto {
+  @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
+  value!: TargetFormula;
+
+  @ApiProperty({ example: "Mifflin-St Jeor" })
+  label!: string;
+
+  @ApiProperty({ example: "Modern default for BMR/TDEE based on sex, age, height, and weight." })
+  description!: string;
+
+  @ApiProperty({ example: true })
+  isDefault!: boolean;
+}
 
 export class UserProfileResponseDto {
   @ApiProperty({ example: "profile_123" })
@@ -32,6 +46,9 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional({ enum: GoalType, nullable: true })
   goal!: GoalType | null;
 
+  @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
+  targetFormula!: TargetFormula;
+
   @ApiPropertyOptional({ example: -400, nullable: true })
   calorieDelta!: number | null;
 
@@ -46,4 +63,7 @@ export class UserProfileResponseDto {
 
   @ApiPropertyOptional({ example: 210, nullable: true })
   targetCarbsG!: number | null;
+
+  @ApiProperty({ type: [TargetFormulaOptionDto] })
+  availableTargetFormulas!: TargetFormulaOptionDto[];
 }

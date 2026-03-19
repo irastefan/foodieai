@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import { formatUserMe } from "../src/mcp/mcp.mapper";
+import { TARGET_FORMULAS } from "../src/tdee/tdee.constants";
 
 const profile = {
   firstName: "Ira",
@@ -10,11 +11,13 @@ const profile = {
   weightKg: 63,
   activityLevel: "MODERATE",
   goal: "LOSE",
+  targetFormula: "MIFFLIN_ST_JEOR",
   calorieDelta: -400,
   targetCalories: 1850,
   targetProteinG: 120,
   targetFatG: 55,
   targetCarbsG: 210,
+  availableTargetFormulas: TARGET_FORMULAS.map((formula) => ({ ...formula })),
 };
 
 const result = formatUserMe(profile);
@@ -22,6 +25,8 @@ const result = formatUserMe(profile);
 assert.ok(result.profile, "profile should exist");
 assert.ok(result.targets, "targets should exist");
 assert.strictEqual(result.profile.firstName, "Ira");
+assert.strictEqual(result.profile.targetFormula, "MIFFLIN_ST_JEOR");
+assert.ok(result.profile.availableTargetFormulas.length >= 3);
 assert.strictEqual(result.targets.kcal, 1850);
 assert.ok(!("id" in (result as unknown as Record<string, unknown>)), "no id at top level");
 assert.ok(!("user" in (result as unknown as Record<string, unknown>)), "no user object");

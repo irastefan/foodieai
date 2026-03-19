@@ -1,3 +1,5 @@
+import { TARGET_FORMULAS } from "../tdee/tdee.constants";
+
 export type ProductSearchItem = {
   id: string;
   name: string;
@@ -29,7 +31,14 @@ export type UserMeProfile = {
   weightKg: number | null;
   activityLevel: string | null;
   goal: string | null;
+  targetFormula: string;
   calorieDelta: number | null;
+  availableTargetFormulas: Array<{
+    value: string;
+    label: string;
+    description: string;
+    isDefault: boolean;
+  }>;
 };
 
 export type UserMeTargets = {
@@ -85,11 +94,18 @@ type ProfileLike = {
   weightKg: number | null;
   activityLevel: string | null;
   goal: string | null;
+  targetFormula?: string | null;
   calorieDelta: number | null;
   targetCalories: number | null;
   targetProteinG: number | null;
   targetFatG: number | null;
   targetCarbsG: number | null;
+  availableTargetFormulas?: Array<{
+    value: string;
+    label: string;
+    description: string;
+    isDefault: boolean;
+  }>;
 };
 
 export function formatUserMe(profile: ProfileLike | null): UserMeResult {
@@ -105,7 +121,9 @@ export function formatUserMe(profile: ProfileLike | null): UserMeResult {
       weightKg: profile?.weightKg ?? null,
       activityLevel: profile?.activityLevel ?? null,
       goal: profile?.goal ?? null,
+      targetFormula: profile?.targetFormula ?? "MIFFLIN_ST_JEOR",
       calorieDelta: profile?.calorieDelta ?? null,
+      availableTargetFormulas: profile?.availableTargetFormulas ?? TARGET_FORMULAS.map((formula) => ({ ...formula })),
     },
     targets: {
       kcal: profile?.targetCalories ?? null,
