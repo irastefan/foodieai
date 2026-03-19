@@ -11,9 +11,10 @@ import {
 } from "class-validator";
 
 class CreateRecipeIngredientDto {
-  @ApiProperty({ example: "prod_egg" })
+  @ApiPropertyOptional({ example: "prod_egg" })
+  @IsOptional()
   @IsString()
-  productId!: string;
+  productId?: string | null;
 
   @ApiPropertyOptional({ example: "Egg" })
   @IsOptional()
@@ -27,6 +28,26 @@ class CreateRecipeIngredientDto {
   @ApiProperty({ example: "g" })
   @IsString()
   unit!: string;
+
+  @ApiPropertyOptional({ example: 155 })
+  @IsOptional()
+  @IsNumber()
+  kcal100?: number | null;
+
+  @ApiPropertyOptional({ example: 13 })
+  @IsOptional()
+  @IsNumber()
+  protein100?: number | null;
+
+  @ApiPropertyOptional({ example: 11 })
+  @IsOptional()
+  @IsNumber()
+  fat100?: number | null;
+
+  @ApiPropertyOptional({ example: 1.1 })
+  @IsOptional()
+  @IsNumber()
+  carbs100?: number | null;
 }
 
 export class CreateRecipeDto {

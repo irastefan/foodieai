@@ -9,6 +9,19 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateRecipeDto } from "./dto/create-recipe.dto";
 import { UpdateRecipeDto } from "./dto/update-recipe.dto";
 
+type ResolvedIngredientRow = {
+  order: number;
+  name: string;
+  amount: number | null;
+  unit: string | null;
+  productId: string | null;
+  isManual: boolean;
+  kcal100: number | null;
+  protein100: number | null;
+  fat100: number | null;
+  carbs100: number | null;
+};
+
 @Injectable()
 export class RecipesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,45 +30,18 @@ export class RecipesService {
     if (dto.ingredients.length === 0) {
       throw new BadRequestException("ingredients must not be empty");
     }
-
-    const productIds = [...new Set(dto.ingredients.map((ingredient) => ingredient.productId))];
-    const products = await this.prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        OR: [{ scope: "GLOBAL" }, { ownerUserId }],
-      },
-      select: {
-        id: true,
-        name: true,
-        kcal100: true,
-        protein100: true,
-        fat100: true,
-        carbs100: true,
-      },
-    });
-    const productById = new Map(products.map((product) => [product.id, product]));
-
-    const missingProductIds = productIds.filter((id) => !productById.has(id));
-    if (missingProductIds.length > 0) {
-      throw new NotFoundException({
-        code: "PRODUCT_NOT_FOUND",
-        message: "Some products were not found",
-        productIds: missingProductIds,
-      });
-    }
-
+    const ingredientRows = await this.resolveIngredientRows(ownerUserId, dto.ingredients);
     const nutrition = this.calculateNutritionTotals(
-      dto.ingredients.map((ingredient) => {
-        const product = productById.get(ingredient.productId)!;
-        return {
-          amount: ingredient.amount,
-          unit: ingredient.unit,
-          kcal100: product.kcal100,
-          protein100: product.protein100,
-          fat100: product.fat100,
-          carbs100: product.carbs100,
-        };
-      }),
+      ingredientRows
+        .filter((row) => row.amount != null && row.unit != null)
+        .map((row) => ({
+          amount: row.amount as number,
+          unit: row.unit as string,
+          kcal100: row.kcal100 ?? 0,
+          protein100: row.protein100 ?? 0,
+          fat100: row.fat100 ?? 0,
+          carbs100: row.carbs100 ?? 0,
+        })),
       dto.servings,
     );
 
@@ -71,20 +57,7 @@ export class RecipesService {
         nutritionPerServing: nutrition.perServing as any,
         ingredients: {
           createMany: {
-            data: dto.ingredients.map((ingredient, index) => {
-              const product = productById.get(ingredient.productId)!;
-              return {
-                order: index + 1,
-                name: ingredient.name?.trim() || product.name,
-                amount: ingredient.amount,
-                unit: ingredient.unit,
-                productId: ingredient.productId,
-                kcal100: product.kcal100,
-                protein100: product.protein100,
-                fat100: product.fat100,
-                carbs100: product.carbs100,
-              };
-            }),
+            data: ingredientRows,
           },
         },
         steps: {
@@ -193,58 +166,10 @@ export class RecipesService {
       throw new BadRequestException("ingredients must not be empty");
     }
 
-    let ingredientRows: Array<{
-      order: number;
-      name: string;
-      amount: number | null;
-      unit: string | null;
-      productId: string | null;
-      kcal100: number | null;
-      protein100: number | null;
-      fat100: number | null;
-      carbs100: number | null;
-    }> = [];
+    let ingredientRows: ResolvedIngredientRow[] = [];
 
     if (ingredientsInput) {
-      const productIds = [...new Set(ingredientsInput.map((ingredient) => ingredient.productId))];
-      const products = await this.prisma.product.findMany({
-        where: {
-          id: { in: productIds },
-          OR: [{ scope: "GLOBAL" }, { ownerUserId }],
-        },
-        select: {
-          id: true,
-          name: true,
-          kcal100: true,
-          protein100: true,
-          fat100: true,
-          carbs100: true,
-        },
-      });
-      const productById = new Map(products.map((product) => [product.id, product]));
-      const missingProductIds = productIds.filter((id) => !productById.has(id));
-      if (missingProductIds.length > 0) {
-        throw new NotFoundException({
-          code: "PRODUCT_NOT_FOUND",
-          message: "Some products were not found",
-          productIds: missingProductIds,
-        });
-      }
-
-      ingredientRows = ingredientsInput.map((ingredient, index) => {
-        const product = productById.get(ingredient.productId)!;
-        return {
-          order: index + 1,
-          name: ingredient.name?.trim() || product.name,
-          amount: ingredient.amount,
-          unit: ingredient.unit,
-          productId: ingredient.productId,
-          kcal100: product.kcal100,
-          protein100: product.protein100,
-          fat100: product.fat100,
-          carbs100: product.carbs100,
-        };
-      });
+      ingredientRows = await this.resolveIngredientRows(ownerUserId, ingredientsInput);
     } else {
       ingredientRows = existing.ingredients.map((ingredient) => ({
         order: ingredient.order ?? 1,
@@ -252,6 +177,7 @@ export class RecipesService {
         amount: ingredient.amount,
         unit: ingredient.unit,
         productId: ingredient.productId,
+        isManual: ingredient.isManual,
         kcal100: ingredient.kcal100 ?? ingredient.product?.kcal100 ?? null,
         protein100: ingredient.protein100 ?? ingredient.product?.protein100 ?? null,
         fat100: ingredient.fat100 ?? ingredient.product?.fat100 ?? null,
@@ -302,6 +228,7 @@ export class RecipesService {
               amount: ingredient.amount,
               unit: ingredient.unit,
               productId: ingredient.productId,
+              isManual: ingredient.isManual,
               kcal100: ingredient.kcal100,
               protein100: ingredient.protein100,
               fat100: ingredient.fat100,
@@ -349,6 +276,113 @@ export class RecipesService {
     }
     await this.prisma.recipe.delete({ where: { id: recipeId } });
     return { deleted: true, recipeId };
+  }
+
+  private async resolveIngredientRows(
+    ownerUserId: string,
+    ingredients: Array<{
+      productId?: string | null;
+      name?: string | null;
+      amount: number;
+      unit: string;
+      kcal100?: number | null;
+      protein100?: number | null;
+      fat100?: number | null;
+      carbs100?: number | null;
+    }>,
+  ): Promise<ResolvedIngredientRow[]> {
+    const productIds = [
+      ...new Set(
+        ingredients
+          .map((ingredient) => ingredient.productId)
+          .filter((productId): productId is string => Boolean(productId)),
+      ),
+    ];
+    const products = productIds.length > 0
+      ? await this.prisma.product.findMany({
+          where: {
+            id: { in: productIds },
+            OR: [{ scope: "GLOBAL" }, { ownerUserId }],
+          },
+          select: {
+            id: true,
+            name: true,
+            kcal100: true,
+            protein100: true,
+            fat100: true,
+            carbs100: true,
+          },
+        })
+      : [];
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const missingProductIds = productIds.filter((id) => !productById.has(id));
+    if (missingProductIds.length > 0) {
+      throw new NotFoundException({
+        code: "PRODUCT_NOT_FOUND",
+        message: "Some products were not found",
+        productIds: missingProductIds,
+      });
+    }
+
+    return ingredients.map((ingredient, index) => {
+      if (ingredient.productId) {
+        const product = productById.get(ingredient.productId)!;
+        return {
+          order: index + 1,
+          name: ingredient.name?.trim() || product.name,
+          amount: ingredient.amount,
+          unit: ingredient.unit,
+          productId: ingredient.productId,
+          isManual: false,
+          kcal100: product.kcal100,
+          protein100: product.protein100,
+          fat100: product.fat100,
+          carbs100: product.carbs100,
+        };
+      }
+
+      if (!ingredient.name?.trim()) {
+        throw new BadRequestException("Manual ingredient requires name");
+      }
+
+      const nutrition = this.requireManualNutrition(ingredient);
+      return {
+        order: index + 1,
+        name: ingredient.name.trim(),
+        amount: ingredient.amount,
+        unit: ingredient.unit,
+        productId: null,
+        isManual: true,
+        kcal100: nutrition.kcal100,
+        protein100: nutrition.protein100,
+        fat100: nutrition.fat100,
+        carbs100: nutrition.carbs100,
+      };
+    });
+  }
+
+  private requireManualNutrition(ingredient: {
+    kcal100?: number | null;
+    protein100?: number | null;
+    fat100?: number | null;
+    carbs100?: number | null;
+  }) {
+    if (
+      ingredient.kcal100 == null ||
+      ingredient.protein100 == null ||
+      ingredient.fat100 == null ||
+      ingredient.carbs100 == null
+    ) {
+      throw new BadRequestException(
+        "Manual ingredient requires kcal100, protein100, fat100 and carbs100",
+      );
+    }
+    return {
+      kcal100: ingredient.kcal100,
+      protein100: ingredient.protein100,
+      fat100: ingredient.fat100,
+      carbs100: ingredient.carbs100,
+    };
   }
 
   private calculateNutritionTotals(

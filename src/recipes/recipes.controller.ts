@@ -39,7 +39,7 @@ export class RecipesController {
   @Post()
   @ApiOperation({
     summary: "Create recipe",
-    description: "Creates a user-owned recipe with ingredients linked to accessible products.",
+    description: "Creates a user-owned recipe with linked or manual ingredients.",
   })
   @ApiBody({
     type: CreateRecipeDto,
@@ -56,6 +56,17 @@ export class RecipesController {
             { productId: "prod_butter", amount: 10, unit: "g" },
           ],
           steps: ["Beat eggs", "Cook on pan", "Serve"],
+        },
+      },
+      manualIngredient: {
+        summary: "Create recipe with manual ingredient",
+        value: {
+          title: "Protein bowl",
+          servings: 1,
+          ingredients: [
+            { name: "Homemade yogurt", amount: 200, unit: "g", kcal100: 63, protein100: 5.2, fat100: 3.1, carbs100: 7.4 },
+          ],
+          steps: ["Mix", "Serve"],
         },
       },
     },
@@ -123,6 +134,14 @@ export class RecipesController {
             { productId: "prod_butter", amount: 12, unit: "g" },
           ],
           steps: ["Beat eggs thoroughly", "Cook on medium heat", "Serve"],
+        },
+      },
+      replaceWithManualIngredients: {
+        summary: "Replace with manual ingredients",
+        value: {
+          ingredients: [
+            { name: "Homemade yogurt", amount: 200, unit: "g", kcal100: 63, protein100: 5.2, fat100: 3.1, carbs100: 7.4 },
+          ],
         },
       },
     },

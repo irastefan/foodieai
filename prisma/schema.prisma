@@ -164,6 +164,7 @@ model RecipeIngredient {
 
   productId   String?
   product     Product? @relation(fields: [productId], references: [id])
+  isManual    Boolean  @default(false)
 
   kcal100     Float?
   protein100  Float?
@@ -261,14 +262,17 @@ model MealPlanEntry {
   entryType     MealEntryType
   order         Int
 
+  customName    String?
   productId     String?
   product       Product?      @relation(fields: [productId], references: [id])
   recipeId      String?
   recipe        Recipe?       @relation(fields: [recipeId], references: [id])
+  isManual      Boolean       @default(false)
 
   amount        Float?
   unit          String?
   servings      Float?
+  nutritionPer100 Json?
   nutritionTotal Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

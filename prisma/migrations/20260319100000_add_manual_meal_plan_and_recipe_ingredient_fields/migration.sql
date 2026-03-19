@@ -1,0 +1,7 @@
+ALTER TABLE "RecipeIngredient"
+ADD COLUMN "isManual" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "MealPlanEntry"
+ADD COLUMN "customName" TEXT,
+ADD COLUMN "isManual" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "nutritionPer100" JSONB;

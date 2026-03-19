@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsNumber, IsOptional, IsString, Matches, ValidateIf } from "class-validator";
+import { IsNumber, IsOptional, IsString, Matches } from "class-validator";
 
 export class AddMealPlanEntryDto {
   @ApiPropertyOptional({ example: "2026-02-20" })
@@ -22,20 +22,49 @@ export class AddMealPlanEntryDto {
   @IsString()
   recipeId?: string;
 
+  @ApiPropertyOptional({ example: "Homemade yogurt" })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
   @ApiPropertyOptional({ example: 150 })
-  @ValidateIf((value: AddMealPlanEntryDto) => Boolean(value.productId))
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   amount?: number;
 
   @ApiPropertyOptional({ example: "g" })
-  @ValidateIf((value: AddMealPlanEntryDto) => Boolean(value.productId))
+  @IsOptional()
   @IsString()
   unit?: string;
 
   @ApiPropertyOptional({ example: 1 })
-  @ValidateIf((value: AddMealPlanEntryDto) => Boolean(value.recipeId))
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   servings?: number;
+
+  @ApiPropertyOptional({ example: 63 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  kcal100?: number;
+
+  @ApiPropertyOptional({ example: 5.2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  protein100?: number;
+
+  @ApiPropertyOptional({ example: 3.1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  fat100?: number;
+
+  @ApiPropertyOptional({ example: 7.4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  carbs100?: number;
 }

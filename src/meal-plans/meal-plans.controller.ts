@@ -69,6 +69,20 @@ export class MealPlansController {
           servings: 1,
         },
       },
+      manual: {
+        summary: "Add manual item",
+        value: {
+          date: "2026-02-20",
+          slot: "SNACK",
+          name: "Homemade yogurt",
+          amount: 180,
+          unit: "g",
+          kcal100: 63,
+          protein100: 5.2,
+          fat100: 3.1,
+          carbs100: 7.4,
+        },
+      },
     },
   })
   @ApiOkResponse({

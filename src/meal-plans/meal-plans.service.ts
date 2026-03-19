@@ -10,6 +10,13 @@ type NutritionTotals = {
   carbs: number;
 };
 
+type NutritionPer100 = {
+  kcal100: number;
+  protein100: number;
+  fat100: number;
+  carbs100: number;
+};
+
 const SLOT_ORDER = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"] as const;
 type MealSlotName = (typeof SLOT_ORDER)[number];
 
@@ -54,6 +61,7 @@ export class MealPlansService {
           },
           select: {
             id: true,
+            name: true,
             kcal100: true,
             protein100: true,
             fat100: true,
@@ -80,9 +88,17 @@ export class MealPlansService {
             slot,
             entryType: "PRODUCT",
             order: nextOrder,
+            customName: product.name,
             productId: product.id,
+            isManual: false,
             amount: dto.amount,
             unit: dto.unit,
+            nutritionPer100: {
+              kcal100: product.kcal100,
+              protein100: product.protein100,
+              fat100: product.fat100,
+              carbs100: product.carbs100,
+            } as unknown as Prisma.InputJsonValue,
             nutritionTotal: nutrition as unknown as Prisma.InputJsonValue,
           },
         });
@@ -96,6 +112,7 @@ export class MealPlansService {
           },
           select: {
             id: true,
+            title: true,
             nutritionPerServing: true,
           },
         });
@@ -125,8 +142,34 @@ export class MealPlansService {
             slot,
             entryType: "RECIPE",
             order: nextOrder,
+            customName: recipe.title,
             recipeId: recipe.id,
+            isManual: false,
             servings,
+            nutritionTotal: nutrition as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      if (mode === "manual") {
+        const nutritionPer100 = this.getManualNutritionPer100(dto);
+        const nutrition = this.calculateFromProduct(
+          dto.amount as number,
+          dto.unit as string,
+          nutritionPer100,
+        );
+
+        await (tx as any).mealPlanEntry.create({
+          data: {
+            dayId: day.id,
+            slot,
+            entryType: "PRODUCT",
+            order: nextOrder,
+            customName: dto.name?.trim(),
+            isManual: true,
+            amount: dto.amount,
+            unit: dto.unit,
+            nutritionPer100: nutritionPer100 as unknown as Prisma.InputJsonValue,
             nutritionTotal: nutrition as unknown as Prisma.InputJsonValue,
           },
         });
@@ -219,11 +262,11 @@ export class MealPlansService {
     return normalized as MealSlotName;
   }
 
-  private resolveMode(dto: AddMealPlanEntryDto): "product" | "recipe" {
+  private resolveMode(dto: AddMealPlanEntryDto): "product" | "recipe" | "manual" {
     const hasProduct = Boolean(dto.productId);
     const hasRecipe = Boolean(dto.recipeId);
-    if (hasProduct === hasRecipe) {
-      throw new BadRequestException("Provide exactly one of productId or recipeId");
+    if (hasProduct && hasRecipe) {
+      throw new BadRequestException("Provide only one of productId or recipeId");
     }
     if (hasProduct) {
       if (dto.amount == null || !dto.unit) {
@@ -231,7 +274,17 @@ export class MealPlansService {
       }
       return "product";
     }
-    return "recipe";
+    if (hasRecipe) {
+      return "recipe";
+    }
+    if (!dto.name?.trim()) {
+      throw new BadRequestException("For manual entry, name is required");
+    }
+    if (dto.amount == null || !dto.unit) {
+      throw new BadRequestException("For manual entry, amount and unit are required");
+    }
+    this.getManualNutritionPer100(dto);
+    return "manual";
   }
 
   private calculateFromProduct(
@@ -258,6 +311,36 @@ export class MealPlansService {
       fat: (grams * product.fat100) / 100,
       carbs: (grams * product.carbs100) / 100,
     };
+  }
+
+  private getManualNutritionPer100(dto: AddMealPlanEntryDto): NutritionPer100 {
+    const nutrition = {
+      kcal100: dto.kcal100,
+      protein100: dto.protein100,
+      fat100: dto.fat100,
+      carbs100: dto.carbs100,
+    };
+    if (Object.values(nutrition).some((value) => value == null)) {
+      throw new BadRequestException(
+        "For manual entry, kcal100, protein100, fat100 and carbs100 are required",
+      );
+    }
+    return nutrition as NutritionPer100;
+  }
+
+  private parseNutritionPer100(value: unknown): NutritionPer100 | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    const source = value as Record<string, unknown>;
+    const kcal100 = Number(source.kcal100);
+    const protein100 = Number(source.protein100);
+    const fat100 = Number(source.fat100);
+    const carbs100 = Number(source.carbs100);
+    if ([kcal100, protein100, fat100, carbs100].some((item) => Number.isNaN(item))) {
+      return null;
+    }
+    return { kcal100, protein100, fat100, carbs100 };
   }
 
   private parseNutrition(value: unknown): NutritionTotals | null {
@@ -366,11 +449,14 @@ export class MealPlansService {
         slot: entry.slot,
         type: entry.entryType,
         order: entry.order,
+        name: entry.customName ?? entry.product?.name ?? entry.recipe?.title ?? null,
+        isManual: Boolean(entry.isManual),
         product: entry.product,
         recipe: entry.recipe,
         amount: entry.amount,
         unit: entry.unit,
         servings: entry.servings,
+        nutritionPer100: this.parseNutritionPer100(entry.nutritionPer100),
         nutritionTotal: this.parseNutrition(entry.nutritionTotal) ?? this.emptyTotals(),
       });
     }
