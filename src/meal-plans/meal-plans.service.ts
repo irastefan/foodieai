@@ -17,6 +17,24 @@ type NutritionPer100 = {
   carbs100: number;
 };
 
+type MealPlanHistoryItem = {
+  entryId: string;
+  dayId: string;
+  date: string;
+  createdAt: string;
+  slot: MealSlotName;
+  type: string;
+  name: string | null;
+  isManual: boolean;
+  product: { id: string; name: string } | null;
+  recipe: { id: string; title: string } | null;
+  amount: number | null;
+  unit: string | null;
+  servings: number | null;
+  nutritionPer100: NutritionPer100 | null;
+  nutritionTotal: NutritionTotals;
+};
+
 const SLOT_ORDER = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"] as const;
 type MealSlotName = (typeof SLOT_ORDER)[number];
 
@@ -207,6 +225,47 @@ export class MealPlansService {
     return this.formatDay(recalculated);
   }
 
+  async getHistory(userId: string, date?: string) {
+    const anchorDate = this.parseDay(date);
+    const range = this.getHistoryRange(anchorDate);
+    const entries = await (this.prisma as any).mealPlanEntry.findMany({
+      where: {
+        day: {
+          ownerUserId: userId,
+          date: {
+            gte: range.from,
+            lte: range.to,
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        day: { select: { id: true, date: true } },
+        product: { select: { id: true, name: true } },
+        recipe: { select: { id: true, title: true } },
+      },
+    });
+
+    const seen = new Set<string>();
+    const items: MealPlanHistoryItem[] = [];
+
+    for (const entry of entries) {
+      const key = this.buildHistoryDedupKey(entry);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      items.push(this.formatHistoryItem(entry));
+    }
+
+    return {
+      anchorDate: anchorDate.toISOString().slice(0, 10),
+      fromDate: range.from.toISOString().slice(0, 10),
+      toDate: range.to.toISOString().slice(0, 10),
+      items,
+    };
+  }
+
   private async getOrCreateDay(userId: string, date: Date) {
     return (this.prisma as any).mealPlanDay.upsert({
       where: {
@@ -252,6 +311,14 @@ export class MealPlansService {
       throw new BadRequestException("invalid date");
     }
     return parsed;
+  }
+
+  private getHistoryRange(anchorDate: Date) {
+    const from = new Date(anchorDate);
+    from.setUTCDate(from.getUTCDate() - 29);
+    const to = new Date(anchorDate);
+    to.setUTCHours(23, 59, 59, 999);
+    return { from, to };
   }
 
   private parseSlot(slot: string): MealSlotName {
@@ -468,5 +535,40 @@ export class MealPlansService {
       nutritionBySlot: day.nutritionBySlot ?? this.emptyBySlotTotals(),
       nutritionTotal: day.nutritionTotal ?? this.emptyTotals(),
     };
+  }
+
+  private formatHistoryItem(entry: any): MealPlanHistoryItem {
+    const slot = this.parseSlot(String(entry.slot));
+    return {
+      entryId: entry.id,
+      dayId: entry.day.id,
+      date: entry.day.date.toISOString().slice(0, 10),
+      createdAt: entry.createdAt.toISOString(),
+      slot,
+      type: entry.entryType,
+      name: entry.customName ?? entry.product?.name ?? entry.recipe?.title ?? null,
+      isManual: Boolean(entry.isManual),
+      product: entry.product ?? null,
+      recipe: entry.recipe ?? null,
+      amount: entry.amount ?? null,
+      unit: entry.unit ?? null,
+      servings: entry.servings ?? null,
+      nutritionPer100: this.parseNutritionPer100(entry.nutritionPer100),
+      nutritionTotal: this.parseNutrition(entry.nutritionTotal) ?? this.emptyTotals(),
+    };
+  }
+
+  private buildHistoryDedupKey(entry: any) {
+    if (entry.recipeId) {
+      return `recipe:${entry.recipeId}`;
+    }
+    if (entry.productId) {
+      return `product:${entry.productId}`;
+    }
+    const name = typeof entry.customName === "string" ? entry.customName.trim().toLowerCase() : "";
+    if (name.length > 0) {
+      return `manual:${name}`;
+    }
+    return `entry:${entry.id}`;
   }
 }

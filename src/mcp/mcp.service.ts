@@ -4,6 +4,7 @@ import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { AddMealPlanEntryDto } from "../meal-plans/dto/add-meal-plan-entry.dto";
 import { GetMealPlanDayDto } from "../meal-plans/dto/get-meal-plan-day.dto";
+import { GetMealPlanHistoryDto } from "../meal-plans/dto/get-meal-plan-history.dto";
 import { RemoveMealPlanEntryDto } from "../meal-plans/dto/remove-meal-plan-entry.dto";
 import { MealPlansService } from "../meal-plans/meal-plans.service";
 import { CreateProductDto } from "../products/dto/create-product.dto";
@@ -376,7 +377,7 @@ export class McpService {
               createRecipe: ["recipe.create"],
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
-              planMeals: ["mealPlan.dayGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
+              planMeals: ["mealPlan.dayGet", "mealPlan.historyGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
               shopping: [
                 "shoppingList.get",
                 "shoppingList.addCategory",
@@ -434,8 +435,8 @@ export class McpService {
             topic === "products"
               ? "Products:\n- Search products before recipe creation: product.search\n- Add manual product with macros: product.createManual"
               : topic === "meal-plans"
-                ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
-              : topic === "shopping-list"
+                ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Get add history: mealPlan.historyGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
+                : topic === "shopping-list"
                 ? "Shopping list:\n- Read list: shoppingList.get\n- Add category: shoppingList.addCategory\n- Add item (productId or customName): shoppingList.addItem"
               : topic === "users"
                 ? "Users:\n- user.me returns profile\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates targets"
@@ -717,6 +718,41 @@ export class McpService {
           return {
             text: "✅ Meal plan loaded",
             json: day,
+          };
+        },
+      },
+      "mealPlan.historyGet": {
+        name: "mealPlan.historyGet",
+        description:
+          "Get unique meal plan add history for the last 30 days up to a selected date.\nUse to suggest recently added foods.\nReturns items sorted by added time descending.",
+        tags: ["meal-plans"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { date: { type: ["string", "null"] } },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Recent meal plan items", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 241,
+              method: "tools/call",
+              params: { name: "mealPlan.historyGet", arguments: { date: "2026-02-20" } },
+            },
+          },
+        ],
+        dtoClass: GetMealPlanHistoryDto,
+        handler: async (args, context) => {
+          const history = await this.getMealPlanHistory(context.userId as string, args);
+          return {
+            text: "✅ Meal plan history loaded",
+            json: history,
           };
         },
       },
@@ -1192,6 +1228,11 @@ export class McpService {
   async getMealPlanDay(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateDto(GetMealPlanDayDto, args);
     return this.mealPlansService.getDay(userId, dto.date);
+  }
+
+  async getMealPlanHistory(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(GetMealPlanHistoryDto, args);
+    return this.mealPlansService.getHistory(userId, dto.date);
   }
 
   async addMealPlanEntry(userId: string, args: Record<string, unknown>) {

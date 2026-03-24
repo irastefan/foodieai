@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiQuery
 import { AuthContextService } from "../auth/auth-context.service";
 import { AddMealPlanEntryDto } from "./dto/add-meal-plan-entry.dto";
 import { GetMealPlanDayDto } from "./dto/get-meal-plan-day.dto";
+import { GetMealPlanHistoryDto } from "./dto/get-meal-plan-history.dto";
 import { RemoveMealPlanEntryDto } from "./dto/remove-meal-plan-entry.dto";
 import { MealPlansService } from "./meal-plans.service";
 
@@ -40,6 +41,47 @@ export class MealPlansController {
   ) {
     const userId = await this.authContext.getUserId(headers);
     return this.mealPlansService.getDay(userId, query.date);
+  }
+
+  @Get("history")
+  @ApiOperation({
+    summary: "Get meal plan add history",
+    description: "Returns unique meal plan items added during the last 30 days up to the selected date, sorted by added time descending.",
+  })
+  @ApiQuery({ name: "date", required: false, example: "2026-02-20" })
+  @ApiOkResponse({
+    description: "Meal plan add history",
+    schema: {
+      type: "object",
+      properties: {
+        anchorDate: { type: "string", example: "2026-02-20" },
+        fromDate: { type: "string", example: "2026-01-22" },
+        toDate: { type: "string", example: "2026-02-20" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              entryId: { type: "string", example: "mpe_123" },
+              dayId: { type: "string", example: "mpd_123" },
+              date: { type: "string", example: "2026-02-20" },
+              createdAt: { type: "string", example: "2026-02-20T09:15:00.000Z" },
+              slot: { type: "string", example: "BREAKFAST" },
+              type: { type: "string", example: "PRODUCT" },
+              name: { type: "string", example: "Greek yogurt" },
+              isManual: { type: "boolean", example: false },
+            },
+          },
+        },
+      },
+    },
+  })
+  async getHistory(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() query: GetMealPlanHistoryDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.mealPlansService.getHistory(userId, query.date);
   }
 
   @Post("day/entries")

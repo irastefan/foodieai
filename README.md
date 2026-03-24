@@ -37,6 +37,7 @@ Create `.env` from `.env.example`.
 - `PATCH /v1/recipes/:recipeId`
 - `DELETE /v1/recipes/:recipeId`
 - `GET /v1/meal-plans/day?date=YYYY-MM-DD`
+- `GET /v1/meal-plans/history?date=YYYY-MM-DD`
 - `POST /v1/meal-plans/day/entries`
 - `DELETE /v1/meal-plans/day/entries/:entryId`
 - `GET /v1/shopping-list`
@@ -64,6 +65,7 @@ Main tools:
 - `recipe.search`
 - `recipe.get`
 - `mealPlan.dayGet`
+- `mealPlan.historyGet`
 - `mealPlan.addEntry`
 - `mealPlan.removeEntry`
 - `shoppingList.get`
