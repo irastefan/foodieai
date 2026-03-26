@@ -17,7 +17,10 @@ import { AddShoppingCategoryDto } from "../shopping-list/dto/add-shopping-catego
 import { AddShoppingItemDto, SetShoppingItemStateDto } from "../shopping-list/dto/add-shopping-item.dto";
 import { ShoppingItemIdDto } from "../shopping-list/dto/item-id.dto";
 import { ShoppingListService } from "../shopping-list/shopping-list.service";
+import { GetBodyMetricsDayDto } from "../users/dto/get-body-metrics-day.dto";
+import { GetBodyMetricsHistoryDto } from "../users/dto/get-body-metrics-history.dto";
 import { UpsertUserProfileDto } from "../users/dto/upsert-user-profile.dto";
+import { UpsertBodyMetricsDto } from "../users/dto/upsert-body-metrics.dto";
 import { UsersService } from "../users/users.service";
 import { throwMcpError } from "./mcp.utils";
 
@@ -378,6 +381,7 @@ export class McpService {
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
               planMeals: ["mealPlan.dayGet", "mealPlan.historyGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
+              trackBodyMetrics: ["bodyMetrics.dayGet", "bodyMetrics.upsertDaily", "bodyMetrics.historyGet"],
               shopping: [
                 "shoppingList.get",
                 "shoppingList.addCategory",
@@ -439,7 +443,7 @@ export class McpService {
                 : topic === "shopping-list"
                 ? "Shopping list:\n- Read list: shoppingList.get\n- Add category: shoppingList.addCategory\n- Add item (productId or customName): shoppingList.addItem"
               : topic === "users"
-                ? "Users:\n- user.me returns profile\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates targets"
+                ? "Users:\n- user.me returns profile\n- userProfile.upsert saves profile\n- userTargets.recalculate recalculates targets\n- bodyMetrics.upsertDaily saves daily weight/measurements\n- bodyMetrics.dayGet/bodyMetrics.historyGet read them"
                 : "Recipes:\n- Create in one call with product-linked ingredients: recipe.create\n- Then use recipe.search / recipe.get.";
           const examples = {
             jsonrpc: "2.0",
@@ -683,6 +687,142 @@ export class McpService {
           return {
             text: "✅ Targets recalculated",
             json: { profileId: profile?.id ?? null, profile },
+          };
+        },
+      },
+      "bodyMetrics.dayGet": {
+        name: "bodyMetrics.dayGet",
+        description:
+          "Get daily body metrics.\nUse to inspect weight and body measurements for a day.\nReturns entry or null.",
+        tags: ["users", "body-metrics"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { date: { type: ["string", "null"] } },
+          required: [],
+        },
+        outputSchema: { type: ["object", "null"] },
+        examples: [{ summary: "Today body metrics", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 23,
+              method: "tools/call",
+              params: { name: "bodyMetrics.dayGet", arguments: { date: "2026-03-26" } },
+            },
+          },
+        ],
+        dtoClass: GetBodyMetricsDayDto,
+        handler: async (args, context) => {
+          const entry = await this.getBodyMetricsDay(context.userId as string, args);
+          return {
+            text: entry ? "✅ Body metrics loaded" : "✅ No body metrics for date",
+            json: entry,
+          };
+        },
+      },
+      "bodyMetrics.upsertDaily": {
+        name: "bodyMetrics.upsertDaily",
+        description:
+          "Create or update daily weight and body measurements.\nUse for progress tracking.\nReturns saved daily entry.",
+        tags: ["users", "body-metrics"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            date: { type: ["string", "null"] },
+            weightKg: { type: ["number", "null"] },
+            neckCm: { type: ["number", "null"] },
+            bustCm: { type: ["number", "null"] },
+            underbustCm: { type: ["number", "null"] },
+            waistCm: { type: ["number", "null"] },
+            hipsCm: { type: ["number", "null"] },
+            bicepsCm: { type: ["number", "null"] },
+            forearmCm: { type: ["number", "null"] },
+            thighCm: { type: ["number", "null"] },
+            calfCm: { type: ["number", "null"] },
+          },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          {
+            summary: "Weight only",
+            arguments: { date: "2026-03-26", weightKg: 62.4 },
+          },
+          {
+            summary: "Weight and measurements",
+            arguments: { date: "2026-03-26", weightKg: 62.4, waistCm: 68, hipsCm: 95, thighCm: 54 },
+          },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 231,
+              method: "tools/call",
+              params: {
+                name: "bodyMetrics.upsertDaily",
+                arguments: { date: "2026-03-26", weightKg: 62.4, waistCm: 68 },
+              },
+            },
+          },
+        ],
+        dtoClass: UpsertBodyMetricsDto,
+        handler: async (args, context) => {
+          const entry = await this.upsertBodyMetrics(context.userId as string, args);
+          return {
+            text: "✅ Body metrics saved",
+            json: entry,
+          };
+        },
+      },
+      "bodyMetrics.historyGet": {
+        name: "bodyMetrics.historyGet",
+        description:
+          "Get body metrics history for a date range.\nUse to plot progress over time.\nReturns daily entries sorted by date descending.",
+        tags: ["users", "body-metrics"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            fromDate: { type: ["string", "null"] },
+            toDate: { type: ["string", "null"] },
+            limitDays: { type: ["number", "null"] },
+          },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          { summary: "Last 30 days", arguments: {} },
+          { summary: "Custom range", arguments: { fromDate: "2026-03-01", toDate: "2026-03-26" } },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 232,
+              method: "tools/call",
+              params: { name: "bodyMetrics.historyGet", arguments: { fromDate: "2026-03-01", toDate: "2026-03-26" } },
+            },
+          },
+        ],
+        dtoClass: GetBodyMetricsHistoryDto,
+        handler: async (args, context) => {
+          const history = await this.getBodyMetricsHistory(context.userId as string, args);
+          return {
+            text: "✅ Body metrics history loaded",
+            json: history,
           };
         },
       },
@@ -1223,6 +1363,21 @@ export class McpService {
 
   async recalculateTargets(userId: string) {
     return this.usersService.recalculateTargets(userId);
+  }
+
+  async getBodyMetricsDay(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(GetBodyMetricsDayDto, args);
+    return this.usersService.getBodyMetricsDay(userId, dto.date);
+  }
+
+  async upsertBodyMetrics(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(UpsertBodyMetricsDto, args);
+    return this.usersService.upsertBodyMetrics(userId, dto);
+  }
+
+  async getBodyMetricsHistory(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(GetBodyMetricsHistoryDto, args);
+    return this.usersService.getBodyMetricsHistory(userId, dto);
   }
 
   async getMealPlanDay(userId: string, args: Record<string, unknown>) {

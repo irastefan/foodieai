@@ -1,8 +1,12 @@
-import { Body, Controller, Get, Headers, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
+import { BodyMetricsEntryResponseDto } from "./dto/body-metrics-response.dto";
 import { EmptyBodyDto } from "./dto/empty-body.dto";
+import { GetBodyMetricsDayDto } from "./dto/get-body-metrics-day.dto";
+import { GetBodyMetricsHistoryDto } from "./dto/get-body-metrics-history.dto";
 import { UpsertUserProfileDto } from "./dto/upsert-user-profile.dto";
+import { UpsertBodyMetricsDto } from "./dto/upsert-body-metrics.dto";
 import { UserIdDto } from "./dto/user-id.dto";
 import { UserMeResponseDto } from "./dto/user-me-response.dto";
 import { UserProfileResponseDto } from "./dto/user-profile-response.dto";
@@ -91,6 +95,94 @@ export class UsersController {
   ) {
     const userId = await this.authContext.getUserId(headers);
     return this.usersService.recalculateTargets(userId);
+  }
+
+  @Get("body-metrics/daily")
+  @ApiOperation({
+    summary: "Get daily body metrics",
+    description: "Returns weight and body measurements for a specific day. Defaults to today.",
+  })
+  @ApiOkResponse({
+    description: "Daily body metrics entry or null",
+    schema: {
+      oneOf: [
+        { $ref: "#/components/schemas/BodyMetricsEntryResponseDto" },
+        { type: "null" },
+      ],
+    },
+  })
+  async getBodyMetricsDay(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() query: GetBodyMetricsDayDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.usersService.getBodyMetricsDay(userId, query.date);
+  }
+
+  @Put("body-metrics/daily")
+  @ApiOperation({
+    summary: "Upsert daily body metrics",
+    description: "Creates or updates daily weight and body measurements. Repeated calls for one day merge values.",
+  })
+  @ApiBody({
+    type: UpsertBodyMetricsDto,
+    examples: {
+      weightOnly: {
+        summary: "Weight only",
+        value: {
+          date: "2026-03-26",
+          weightKg: 62.4,
+        },
+      },
+      weightAndMeasurements: {
+        summary: "Weight and measurements",
+        value: {
+          date: "2026-03-26",
+          weightKg: 62.4,
+          waistCm: 68,
+          hipsCm: 95,
+          thighCm: 54,
+        },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: "Saved daily body metrics entry",
+    type: BodyMetricsEntryResponseDto,
+  })
+  async upsertBodyMetrics(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body() body: UpsertBodyMetricsDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.usersService.upsertBodyMetrics(userId, body);
+  }
+
+  @Get("body-metrics/history")
+  @ApiOperation({
+    summary: "Get body metrics history",
+    description: "Returns daily body metrics history for a period, sorted by date descending.",
+  })
+  @ApiOkResponse({
+    description: "Body metrics history",
+    schema: {
+      type: "object",
+      properties: {
+        fromDate: { type: "string", example: "2026-02-26" },
+        toDate: { type: "string", example: "2026-03-26" },
+        items: {
+          type: "array",
+          items: { $ref: "#/components/schemas/BodyMetricsEntryResponseDto" },
+        },
+      },
+    },
+  })
+  async getBodyMetricsHistory(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() query: GetBodyMetricsHistoryDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.usersService.getBodyMetricsHistory(userId, query);
   }
 
   @Get("me/products")

@@ -73,6 +73,7 @@ model User {
   externalId         String?            @unique
   createdAt          DateTime           @default(now())
   profile            UserProfile?
+  bodyMetricEntries  UserBodyMetricEntry[]
   mealPlanDays       MealPlanDay[]
   shoppingLists      ShoppingList[]
   shoppingCategories ShoppingCategory[]
@@ -104,6 +105,20 @@ model UserProfile {
   calorieDelta  Int?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model UserBodyMetricEntry {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime
+  weightKg     Float?
+  measurements Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
 }
 
 model Product {

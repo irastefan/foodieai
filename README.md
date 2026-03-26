@@ -31,6 +31,9 @@ Create `.env` from `.env.example`.
 - `GET /v1/products?query=...`
 - `PATCH /v1/products/:productId`
 - `DELETE /v1/products/:productId`
+- `GET /v1/body-metrics/daily?date=YYYY-MM-DD`
+- `PUT /v1/body-metrics/daily`
+- `GET /v1/body-metrics/history?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD`
 - `POST /v1/recipes`
 - `GET /v1/recipes?query=...`
 - `GET /v1/recipes/:recipeId`
@@ -64,6 +67,9 @@ Main tools:
 - `recipe.create`
 - `recipe.search`
 - `recipe.get`
+- `bodyMetrics.dayGet`
+- `bodyMetrics.upsertDaily`
+- `bodyMetrics.historyGet`
 - `mealPlan.dayGet`
 - `mealPlan.historyGet`
 - `mealPlan.addEntry`
