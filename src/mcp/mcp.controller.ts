@@ -176,6 +176,86 @@ export class McpController {
           params: { name: "selfCare.weekGet", arguments: {} },
         },
       },
+      selfCareSlotCreate: {
+        summary: "Create self-care slot",
+        value: {
+          jsonrpc: "2.0",
+          id: 71,
+          method: "tools/call",
+          params: {
+            name: "selfCare.slotCreate",
+            arguments: {
+              weekday: "MONDAY",
+              name: "Morning",
+              order: 1,
+            },
+          },
+        },
+      },
+      selfCareSlotUpdate: {
+        summary: "Update self-care slot",
+        value: {
+          jsonrpc: "2.0",
+          id: 72,
+          method: "tools/call",
+          params: {
+            name: "selfCare.slotUpdate",
+            arguments: {
+              slotId: "slot_123",
+              name: "Evening",
+              order: 2,
+            },
+          },
+        },
+      },
+      selfCareItemCreate: {
+        summary: "Create self-care item",
+        value: {
+          jsonrpc: "2.0",
+          id: 73,
+          method: "tools/call",
+          params: {
+            name: "selfCare.itemCreate",
+            arguments: {
+              slotId: "slot_123",
+              title: "Vitamin C serum",
+              description: "Apply after cleansing, before moisturizer",
+              note: "Use in the morning and finish with SPF",
+              order: 1,
+            },
+          },
+        },
+      },
+      selfCareItemUpdate: {
+        summary: "Update self-care item",
+        value: {
+          jsonrpc: "2.0",
+          id: 74,
+          method: "tools/call",
+          params: {
+            name: "selfCare.itemUpdate",
+            arguments: {
+              itemId: "item_123",
+              note: "Use 2 times per week only",
+              order: 2,
+            },
+          },
+        },
+      },
+      selfCareItemRemove: {
+        summary: "Remove self-care item",
+        value: {
+          jsonrpc: "2.0",
+          id: 75,
+          method: "tools/call",
+          params: {
+            name: "selfCare.itemRemove",
+            arguments: {
+              itemId: "item_123",
+            },
+          },
+        },
+      },
     },
   })
   async handleMcp(
