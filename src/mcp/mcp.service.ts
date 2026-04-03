@@ -332,18 +332,8 @@ export class McpService {
     if (!tool.dtoClass) {
       return args;
     }
-    try {
-      const dto = await this.validateDto(tool.dtoClass as new () => object, args);
-      return dto as Record<string, unknown>;
-    } catch (error) {
-      if (error instanceof McpValidationError) {
-        throwMcpError(-32000, "VALIDATION_ERROR", {
-          fields: this.toValidationFields(error.errors),
-          hint: "Fix invalid fields and try again.",
-        });
-      }
-      throw error;
-    }
+    const dto = await this.validateMcpDto(tool.dtoClass as new () => object, args);
+    return dto as Record<string, unknown>;
   }
 
   private toValidationFields(errors: ValidationError[], parent = ""): Array<{
@@ -1554,7 +1544,7 @@ export class McpService {
   }
 
   async createManual(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(CreateProductDto, args);
+    const dto = await this.validateMcpDto(CreateProductDto, args);
     const signature = this.createSignature(dto);
     const cached = this.recentCreates.get(signature);
     if (cached && cached.expiresAt > Date.now()) {
@@ -1579,7 +1569,7 @@ export class McpService {
   }
 
   async upsertUserProfile(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(UpsertUserProfileDto, args);
+    const dto = await this.validateMcpDto(UpsertUserProfileDto, args);
     return this.usersService.upsertProfile(userId, dto);
   }
 
@@ -1588,37 +1578,37 @@ export class McpService {
   }
 
   async getBodyMetricsDay(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(GetBodyMetricsDayDto, args);
+    const dto = await this.validateMcpDto(GetBodyMetricsDayDto, args);
     return this.usersService.getBodyMetricsDay(userId, dto.date);
   }
 
   async upsertBodyMetrics(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(UpsertBodyMetricsDto, args);
+    const dto = await this.validateMcpDto(UpsertBodyMetricsDto, args);
     return this.usersService.upsertBodyMetrics(userId, dto);
   }
 
   async getBodyMetricsHistory(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(GetBodyMetricsHistoryDto, args);
+    const dto = await this.validateMcpDto(GetBodyMetricsHistoryDto, args);
     return this.usersService.getBodyMetricsHistory(userId, dto);
   }
 
   async getMealPlanDay(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(GetMealPlanDayDto, args);
+    const dto = await this.validateMcpDto(GetMealPlanDayDto, args);
     return this.mealPlansService.getDay(userId, dto.date);
   }
 
   async getMealPlanHistory(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(GetMealPlanHistoryDto, args);
+    const dto = await this.validateMcpDto(GetMealPlanHistoryDto, args);
     return this.mealPlansService.getHistory(userId, dto.date);
   }
 
   async addMealPlanEntry(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(AddMealPlanEntryDto, args);
+    const dto = await this.validateMcpDto(AddMealPlanEntryDto, args);
     return this.mealPlansService.addEntry(userId, dto);
   }
 
   async removeMealPlanEntry(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(RemoveMealPlanEntryDto, args);
+    const dto = await this.validateMcpDto(RemoveMealPlanEntryDto, args);
     return this.mealPlansService.removeEntry(userId, dto.entryId);
   }
 
@@ -1631,72 +1621,89 @@ export class McpService {
   }
 
   async createSelfCareSlot(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(CreateSelfCareSlotDto, args);
+    const dto = await this.validateMcpDto(CreateSelfCareSlotDto, args);
     return this.selfCareRoutinesService.createSlot(userId, dto);
   }
 
   async updateSelfCareSlot(userId: string, args: Record<string, unknown>) {
     const slotId = this.requireStringArg(args, "slotId");
-    const dto = await this.validateDto(UpdateSelfCareSlotDto, args);
+    const dto = await this.validateMcpDto(UpdateSelfCareSlotDto, this.omitArgs(args, "slotId"));
     return this.selfCareRoutinesService.updateSlot(userId, slotId, dto);
   }
 
   async removeSelfCareSlot(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(SelfCareSlotIdDto, args);
+    const dto = await this.validateMcpDto(SelfCareSlotIdDto, args);
     return this.selfCareRoutinesService.removeSlot(userId, dto.slotId);
   }
 
   async createSelfCareItem(userId: string, args: Record<string, unknown>) {
     const slotId = this.requireStringArg(args, "slotId");
-    const dto = await this.validateDto(CreateSelfCareItemDto, args);
+    const dto = await this.validateMcpDto(CreateSelfCareItemDto, this.omitArgs(args, "slotId"));
     return this.selfCareRoutinesService.createItem(userId, slotId, dto);
   }
 
   async updateSelfCareItem(userId: string, args: Record<string, unknown>) {
     const itemId = this.requireStringArg(args, "itemId");
-    const dto = await this.validateDto(UpdateSelfCareItemDto, args);
+    const dto = await this.validateMcpDto(UpdateSelfCareItemDto, this.omitArgs(args, "itemId"));
     return this.selfCareRoutinesService.updateItem(userId, itemId, dto);
   }
 
   async removeSelfCareItem(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(SelfCareItemIdDto, args);
+    const dto = await this.validateMcpDto(SelfCareItemIdDto, args);
     return this.selfCareRoutinesService.removeItem(userId, dto.itemId);
   }
 
   async addShoppingCategory(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(AddShoppingCategoryDto, args);
+    const dto = await this.validateMcpDto(AddShoppingCategoryDto, args);
     return this.shoppingListService.addCategory(userId, dto);
   }
 
   async addShoppingItem(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(AddShoppingItemDto, args);
+    const dto = await this.validateMcpDto(AddShoppingItemDto, args);
     return this.shoppingListService.addItem(userId, dto);
   }
 
   async setShoppingItemState(userId: string, args: Record<string, unknown>) {
-    const itemDto = await this.validateDto(ShoppingItemIdDto, args);
-    const stateDto = await this.validateDto(SetShoppingItemStateDto, args);
+    const itemDto = await this.validateMcpDto(ShoppingItemIdDto, args);
+    const stateDto = await this.validateMcpDto(SetShoppingItemStateDto, args);
     return this.shoppingListService.setItemState(userId, itemDto.itemId, stateDto.isDone);
   }
 
   async removeShoppingItem(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(ShoppingItemIdDto, args);
+    const dto = await this.validateMcpDto(ShoppingItemIdDto, args);
     return this.shoppingListService.removeItem(userId, dto.itemId);
   }
 
   async createRecipe(userId: string, args: Record<string, unknown>) {
-    const dto = await this.validateDto(CreateRecipeDto, args);
+    const dto = await this.validateMcpDto(CreateRecipeDto, args);
     return this.recipesService.create(userId, dto);
   }
 
   async searchRecipes(userId: string | undefined, args: Record<string, unknown>) {
-    const dto = await this.validateDto(SearchRecipesDto, args);
+    const dto = await this.validateMcpDto(SearchRecipesDto, args);
     return this.recipesService.search(userId, dto.query, dto.category, dto.limit);
   }
 
   async getRecipe(userId: string | undefined, args: Record<string, unknown>) {
-    const dto = await this.validateDto(RecipeIdDto, args);
+    const dto = await this.validateMcpDto(RecipeIdDto, args);
     return this.recipesService.get(dto.recipeId, userId);
+  }
+
+  private async validateMcpDto<T extends object>(
+    dtoClass: new () => T,
+    payload: Record<string, unknown> | undefined,
+  ): Promise<T> {
+    try {
+      return await this.validateDto(dtoClass, payload);
+    } catch (error) {
+      if (error instanceof McpValidationError) {
+        throwMcpError(-32000, "VALIDATION_ERROR", {
+          fields: this.toValidationFields(error.errors),
+          hint: "Fix invalid fields and try again.",
+        });
+      }
+      throw error;
+    }
   }
 
   private async validateDto<T extends object>(
@@ -1714,6 +1721,14 @@ export class McpService {
       throw new McpValidationError(errors);
     }
     return dto;
+  }
+
+  private omitArgs(args: Record<string, unknown>, ...keys: string[]) {
+    const result = { ...args };
+    for (const key of keys) {
+      delete result[key];
+    }
+    return result;
   }
 
   private createSignature(dto: CreateProductDto) {
