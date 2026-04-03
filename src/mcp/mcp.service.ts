@@ -13,6 +13,13 @@ import { CreateRecipeDto } from "../recipes/dto/create-recipe.dto";
 import { RecipeIdDto } from "../recipes/dto/recipe-id.dto";
 import { SearchRecipesDto } from "../recipes/dto/search-recipes.dto";
 import { RecipesService } from "../recipes/recipes.service";
+import { CreateSelfCareItemDto } from "../self-care-routines/dto/create-self-care-item.dto";
+import { CreateSelfCareSlotDto } from "../self-care-routines/dto/create-self-care-slot.dto";
+import { SelfCareItemIdDto } from "../self-care-routines/dto/self-care-item-id.dto";
+import { SelfCareSlotIdDto } from "../self-care-routines/dto/self-care-slot-id.dto";
+import { UpdateSelfCareItemDto } from "../self-care-routines/dto/update-self-care-item.dto";
+import { UpdateSelfCareSlotDto } from "../self-care-routines/dto/update-self-care-slot.dto";
+import { SelfCareRoutinesService } from "../self-care-routines/self-care-routines.service";
 import { AddShoppingCategoryDto } from "../shopping-list/dto/add-shopping-category.dto";
 import { AddShoppingItemDto, SetShoppingItemStateDto } from "../shopping-list/dto/add-shopping-item.dto";
 import { ShoppingItemIdDto } from "../shopping-list/dto/item-id.dto";
@@ -70,6 +77,7 @@ export class McpService {
     private readonly productsService: ProductsService,
     private readonly recipesService: RecipesService,
     private readonly mealPlansService: MealPlansService,
+    private readonly selfCareRoutinesService: SelfCareRoutinesService,
     private readonly shoppingListService: ShoppingListService,
     private readonly usersService: UsersService,
   ) {
@@ -282,6 +290,17 @@ export class McpService {
         args.customName = args.customName.trim();
       }
     }
+    if (name.startsWith("selfCare.")) {
+      if (typeof args.weekday === "string") {
+        args.weekday = args.weekday.trim().toUpperCase();
+      }
+      if (typeof args.name === "string") {
+        args.name = args.name.trim();
+      }
+      if (typeof args.title === "string") {
+        args.title = args.title.trim();
+      }
+    }
     return args;
   }
 
@@ -381,6 +400,15 @@ export class McpService {
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
               planMeals: ["mealPlan.dayGet", "mealPlan.historyGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
+              selfCare: [
+                "selfCare.weekGet",
+                "selfCare.slotCreate",
+                "selfCare.slotUpdate",
+                "selfCare.slotRemove",
+                "selfCare.itemCreate",
+                "selfCare.itemUpdate",
+                "selfCare.itemRemove",
+              ],
               trackBodyMetrics: ["bodyMetrics.dayGet", "bodyMetrics.upsertDaily", "bodyMetrics.historyGet"],
               shopping: [
                 "shoppingList.get",
@@ -393,6 +421,7 @@ export class McpService {
             flows: {
               recipe: ["create -> get"],
               mealPlan: ["dayGet -> addEntry* -> dayGet"],
+              selfCare: ["weekGet -> slotCreate* -> itemCreate* -> itemUpdate/itemRemove"],
               shoppingList: ["addCategory* -> addItem* -> setItemState/removeItem"],
             },
           },
@@ -412,7 +441,7 @@ export class McpService {
           properties: {
             topic: {
               type: ["string", "null"],
-              enum: ["recipes", "products", "users", "meal-plans", "shopping-list", "all", null],
+              enum: ["recipes", "products", "users", "meal-plans", "self-care", "shopping-list", "all", null],
             },
           },
           required: [],
@@ -440,6 +469,8 @@ export class McpService {
               ? "Products:\n- Search products before recipe creation: product.search\n- Add manual product with macros: product.createManual"
               : topic === "meal-plans"
                 ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Get add history: mealPlan.historyGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
+                : topic === "self-care"
+                ? "Self-care routines:\n- Get full week: selfCare.weekGet\n- Create/update/delete slots: selfCare.slotCreate / selfCare.slotUpdate / selfCare.slotRemove\n- Create/update/delete items: selfCare.itemCreate / selfCare.itemUpdate / selfCare.itemRemove"
                 : topic === "shopping-list"
                 ? "Shopping list:\n- Read list: shoppingList.get\n- Add category: shoppingList.addCategory\n- Add item (productId or customName): shoppingList.addItem"
               : topic === "users"
@@ -1013,6 +1044,197 @@ export class McpService {
           };
         },
       },
+      "selfCare.weekGet": {
+        name: "selfCare.weekGet",
+        description:
+          "Get weekly repeating self-care routine.\nUse to load all 7 weekdays with ordered slots and items.\nReturns week object.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Get weekly routine", arguments: {} }],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 70,
+              method: "tools/call",
+              params: { name: "selfCare.weekGet", arguments: {} },
+            },
+          },
+        ],
+        handler: async (_args, context) => {
+          const week = await this.getSelfCareWeek(context.userId as string);
+          return {
+            text: "✅ Self-care routine loaded",
+            json: week,
+          };
+        },
+      },
+      "selfCare.slotCreate": {
+        name: "selfCare.slotCreate",
+        description:
+          "Create self-care slot for a weekday.\nUse for morning, evening, or custom slots.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            weekday: { type: "string", enum: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"] },
+            name: { type: "string" },
+            order: { type: ["number", "null"] },
+          },
+          required: ["weekday", "name"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Create morning slot", arguments: { weekday: "MONDAY", name: "Morning", order: 1 } }],
+        dtoClass: CreateSelfCareSlotDto,
+        handler: async (args, context) => {
+          const week = await this.createSelfCareSlot(context.userId as string, args);
+          return {
+            text: "✅ Self-care slot created",
+            json: week,
+          };
+        },
+      },
+      "selfCare.slotUpdate": {
+        name: "selfCare.slotUpdate",
+        description:
+          "Update self-care slot.\nUse to rename or move a slot to another weekday/order.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slotId: { type: "string" },
+            weekday: { type: ["string", "null"], enum: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY", null] },
+            name: { type: ["string", "null"] },
+            order: { type: ["number", "null"] },
+          },
+          required: ["slotId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Rename slot", arguments: { slotId: "slot_123", name: "Evening" } }],
+        handler: async (args, context) => {
+          const week = await this.updateSelfCareSlot(context.userId as string, args);
+          return {
+            text: "✅ Self-care slot updated",
+            json: week,
+          };
+        },
+      },
+      "selfCare.slotRemove": {
+        name: "selfCare.slotRemove",
+        description:
+          "Delete self-care slot.\nUse when user removes a routine block.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { slotId: { type: "string" } },
+          required: ["slotId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Remove slot", arguments: { slotId: "slot_123" } }],
+        dtoClass: SelfCareSlotIdDto,
+        handler: async (args, context) => {
+          const week = await this.removeSelfCareSlot(context.userId as string, args);
+          return {
+            text: "✅ Self-care slot removed",
+            json: week,
+          };
+        },
+      },
+      "selfCare.itemCreate": {
+        name: "selfCare.itemCreate",
+        description:
+          "Create self-care item inside a slot.\nUse for cleanser, serum, mask, microcurrent, and notes.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slotId: { type: "string" },
+            title: { type: "string" },
+            description: { type: ["string", "null"] },
+            note: { type: ["string", "null"] },
+            order: { type: ["number", "null"] },
+          },
+          required: ["slotId", "title"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Add serum", arguments: { slotId: "slot_123", title: "Vitamin C serum", order: 2 } }],
+        handler: async (args, context) => {
+          const week = await this.createSelfCareItem(context.userId as string, args);
+          return {
+            text: "✅ Self-care item created",
+            json: week,
+          };
+        },
+      },
+      "selfCare.itemUpdate": {
+        name: "selfCare.itemUpdate",
+        description:
+          "Update self-care item.\nUse to edit title, description, note, or order.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            itemId: { type: "string" },
+            title: { type: ["string", "null"] },
+            description: { type: ["string", "null"] },
+            note: { type: ["string", "null"] },
+            order: { type: ["number", "null"] },
+          },
+          required: ["itemId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Update note", arguments: { itemId: "item_123", note: "Use twice a week" } }],
+        handler: async (args, context) => {
+          const week = await this.updateSelfCareItem(context.userId as string, args);
+          return {
+            text: "✅ Self-care item updated",
+            json: week,
+          };
+        },
+      },
+      "selfCare.itemRemove": {
+        name: "selfCare.itemRemove",
+        description:
+          "Delete self-care item.\nUse when user removes a procedure from a slot.\nReturns updated weekly routine.",
+        tags: ["self-care"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { itemId: { type: "string" } },
+          required: ["itemId"],
+        },
+        outputSchema: { type: "object" },
+        examples: [{ summary: "Remove item", arguments: { itemId: "item_123" } }],
+        dtoClass: SelfCareItemIdDto,
+        handler: async (args, context) => {
+          const week = await this.removeSelfCareItem(context.userId as string, args);
+          return {
+            text: "✅ Self-care item removed",
+            json: week,
+          };
+        },
+      },
       "shoppingList.get": {
         name: "shoppingList.get",
         description:
@@ -1402,6 +1624,43 @@ export class McpService {
 
   async getShoppingList(userId: string) {
     return this.shoppingListService.getList(userId);
+  }
+
+  async getSelfCareWeek(userId: string) {
+    return this.selfCareRoutinesService.getWeek(userId);
+  }
+
+  async createSelfCareSlot(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(CreateSelfCareSlotDto, args);
+    return this.selfCareRoutinesService.createSlot(userId, dto);
+  }
+
+  async updateSelfCareSlot(userId: string, args: Record<string, unknown>) {
+    const idDto = await this.validateDto(SelfCareSlotIdDto, args);
+    const dto = await this.validateDto(UpdateSelfCareSlotDto, args);
+    return this.selfCareRoutinesService.updateSlot(userId, idDto.slotId, dto);
+  }
+
+  async removeSelfCareSlot(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(SelfCareSlotIdDto, args);
+    return this.selfCareRoutinesService.removeSlot(userId, dto.slotId);
+  }
+
+  async createSelfCareItem(userId: string, args: Record<string, unknown>) {
+    const slotDto = await this.validateDto(SelfCareSlotIdDto, args);
+    const dto = await this.validateDto(CreateSelfCareItemDto, args);
+    return this.selfCareRoutinesService.createItem(userId, slotDto.slotId, dto);
+  }
+
+  async updateSelfCareItem(userId: string, args: Record<string, unknown>) {
+    const idDto = await this.validateDto(SelfCareItemIdDto, args);
+    const dto = await this.validateDto(UpdateSelfCareItemDto, args);
+    return this.selfCareRoutinesService.updateItem(userId, idDto.itemId, dto);
+  }
+
+  async removeSelfCareItem(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateDto(SelfCareItemIdDto, args);
+    return this.selfCareRoutinesService.removeItem(userId, dto.itemId);
   }
 
   async addShoppingCategory(userId: string, args: Record<string, unknown>) {
