@@ -66,6 +66,16 @@ enum MealEntryType {
   RECIPE
 }
 
+enum RoutineWeekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
 model User {
   id                 String             @id @default(cuid())
   email              String             @unique
@@ -79,6 +89,7 @@ model User {
   shoppingCategories ShoppingCategory[]
   products           Product[]
   recipes            Recipe[]
+  selfCareSlots      SelfCareRoutineSlot[]
 }
 
 model UserProfile {
@@ -294,4 +305,36 @@ model MealPlanEntry {
 
   @@index([dayId, slot])
   @@unique([dayId, slot, order])
+}
+
+model SelfCareRoutineSlot {
+  id             String                @id @default(cuid())
+  ownerUserId    String
+  owner          User                  @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  weekday        RoutineWeekday
+  name           String
+  normalizedName String
+  order          Int
+  items          SelfCareRoutineItem[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([ownerUserId, weekday, order])
+  @@unique([ownerUserId, weekday, normalizedName])
+  @@unique([ownerUserId, weekday, order])
+}
+
+model SelfCareRoutineItem {
+  id          String              @id @default(cuid())
+  slotId       String
+  slot         SelfCareRoutineSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  note         String?
+  order        Int
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([slotId, order])
+  @@unique([slotId, order])
 }
