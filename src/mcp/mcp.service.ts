@@ -1636,9 +1636,9 @@ export class McpService {
   }
 
   async updateSelfCareSlot(userId: string, args: Record<string, unknown>) {
-    const idDto = await this.validateDto(SelfCareSlotIdDto, args);
+    const slotId = this.requireStringArg(args, "slotId");
     const dto = await this.validateDto(UpdateSelfCareSlotDto, args);
-    return this.selfCareRoutinesService.updateSlot(userId, idDto.slotId, dto);
+    return this.selfCareRoutinesService.updateSlot(userId, slotId, dto);
   }
 
   async removeSelfCareSlot(userId: string, args: Record<string, unknown>) {
@@ -1647,15 +1647,15 @@ export class McpService {
   }
 
   async createSelfCareItem(userId: string, args: Record<string, unknown>) {
-    const slotDto = await this.validateDto(SelfCareSlotIdDto, args);
+    const slotId = this.requireStringArg(args, "slotId");
     const dto = await this.validateDto(CreateSelfCareItemDto, args);
-    return this.selfCareRoutinesService.createItem(userId, slotDto.slotId, dto);
+    return this.selfCareRoutinesService.createItem(userId, slotId, dto);
   }
 
   async updateSelfCareItem(userId: string, args: Record<string, unknown>) {
-    const idDto = await this.validateDto(SelfCareItemIdDto, args);
+    const itemId = this.requireStringArg(args, "itemId");
     const dto = await this.validateDto(UpdateSelfCareItemDto, args);
-    return this.selfCareRoutinesService.updateItem(userId, idDto.itemId, dto);
+    return this.selfCareRoutinesService.updateItem(userId, itemId, dto);
   }
 
   async removeSelfCareItem(userId: string, args: Record<string, unknown>) {
@@ -1725,5 +1725,16 @@ export class McpService {
       fat100: dto.fat100,
       carbs100: dto.carbs100,
     });
+  }
+
+  private requireStringArg(args: Record<string, unknown>, key: string) {
+    const value = args[key];
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throwMcpError(-32000, "VALIDATION_ERROR", {
+        fields: [{ path: key, expected: "string", got: this.describeType(value) }],
+        hint: `Provide a non-empty ${key}.`,
+      });
+    }
+    return value.trim();
   }
 }
