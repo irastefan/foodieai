@@ -84,9 +84,54 @@ export class McpController {
       },
     },
     examples: {
+      initialize: {
+        summary: "Initialize MCP",
+        value: {
+          jsonrpc: "2.0",
+          id: "init-1",
+          method: "initialize",
+          params: {},
+        },
+      },
       toolsList: {
         summary: "List all tools",
         value: { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+      },
+      mcpCapabilities: {
+        summary: "Get MCP capabilities",
+        value: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "mcp.capabilities", arguments: {} },
+        },
+      },
+      mcpHelp: {
+        summary: "Get MCP help",
+        value: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "mcp.help", arguments: { topic: "self-care" } },
+        },
+      },
+      productCreateManual: {
+        summary: "Create manual product",
+        value: {
+          jsonrpc: "2.0",
+          id: 9,
+          method: "tools/call",
+          params: {
+            name: "product.createManual",
+            arguments: {
+              name: "Salmon",
+              kcal100: 208,
+              protein100: 20,
+              fat100: 13,
+              carbs100: 0,
+            },
+          },
+        },
       },
       productSearch: {
         summary: "Search products",
@@ -95,6 +140,76 @@ export class McpController {
           id: 10,
           method: "tools/call",
           params: { name: "product.search", arguments: { query: "yogurt" } },
+        },
+      },
+      userMe: {
+        summary: "Get current user",
+        value: {
+          jsonrpc: "2.0",
+          id: 20,
+          method: "tools/call",
+          params: { name: "user.me", arguments: {} },
+        },
+      },
+      userProfileUpsert: {
+        summary: "Upsert user profile",
+        value: {
+          jsonrpc: "2.0",
+          id: 21,
+          method: "tools/call",
+          params: {
+            name: "userProfile.upsert",
+            arguments: {
+              firstName: "Ira",
+              sex: "FEMALE",
+              heightCm: 168,
+              weightKg: 63,
+              activityLevel: "MODERATE",
+              goal: "LOSE",
+            },
+          },
+        },
+      },
+      userTargetsRecalculate: {
+        summary: "Recalculate targets",
+        value: {
+          jsonrpc: "2.0",
+          id: 22,
+          method: "tools/call",
+          params: { name: "userTargets.recalculate", arguments: {} },
+        },
+      },
+      bodyMetricsDayGet: {
+        summary: "Get body metrics by day",
+        value: {
+          jsonrpc: "2.0",
+          id: 23,
+          method: "tools/call",
+          params: { name: "bodyMetrics.dayGet", arguments: { date: "2026-03-26" } },
+        },
+      },
+      bodyMetricsUpsertDaily: {
+        summary: "Upsert daily body metrics",
+        value: {
+          jsonrpc: "2.0",
+          id: 24,
+          method: "tools/call",
+          params: {
+            name: "bodyMetrics.upsertDaily",
+            arguments: { date: "2026-03-26", weightKg: 62.4, waistCm: 68, hipsCm: 95 },
+          },
+        },
+      },
+      bodyMetricsHistoryGet: {
+        summary: "Get body metrics history",
+        value: {
+          jsonrpc: "2.0",
+          id: 25,
+          method: "tools/call",
+          params: {
+            name: "bodyMetrics.historyGet",
+            arguments: { fromDate: "2026-03-01", toDate: "2026-03-26" },
+          },
         },
       },
       recipeCreate: {
@@ -143,11 +258,20 @@ export class McpController {
           params: { name: "mealPlan.dayGet", arguments: { date: "2026-02-20" } },
         },
       },
+      mealPlanHistoryGet: {
+        summary: "Get meal plan history",
+        value: {
+          jsonrpc: "2.0",
+          id: 51,
+          method: "tools/call",
+          params: { name: "mealPlan.historyGet", arguments: { date: "2026-02-20" } },
+        },
+      },
       mealPlanAddEntry: {
         summary: "Add meal entry",
         value: {
           jsonrpc: "2.0",
-          id: 51,
+          id: 52,
           method: "tools/call",
           params: {
             name: "mealPlan.addEntry",
@@ -155,15 +279,72 @@ export class McpController {
           },
         },
       },
-      shoppingListAddItem: {
-        summary: "Add shopping item",
+      mealPlanRemoveEntry: {
+        summary: "Remove meal entry",
+        value: {
+          jsonrpc: "2.0",
+          id: 53,
+          method: "tools/call",
+          params: {
+            name: "mealPlan.removeEntry",
+            arguments: { entryId: "entry_123" },
+          },
+        },
+      },
+      shoppingListGet: {
+        summary: "Get shopping list",
+        value: {
+          jsonrpc: "2.0",
+          id: 60,
+          method: "tools/call",
+          params: { name: "shoppingList.get", arguments: {} },
+        },
+      },
+      shoppingListAddCategory: {
+        summary: "Add shopping category",
         value: {
           jsonrpc: "2.0",
           id: 61,
           method: "tools/call",
           params: {
+            name: "shoppingList.addCategory",
+            arguments: { name: "Dairy" },
+          },
+        },
+      },
+      shoppingListAddItem: {
+        summary: "Add shopping item",
+        value: {
+          jsonrpc: "2.0",
+          id: 62,
+          method: "tools/call",
+          params: {
             name: "shoppingList.addItem",
             arguments: { customName: "Paper towels", categoryName: "Home" },
+          },
+        },
+      },
+      shoppingListSetItemState: {
+        summary: "Set shopping item state",
+        value: {
+          jsonrpc: "2.0",
+          id: 63,
+          method: "tools/call",
+          params: {
+            name: "shoppingList.setItemState",
+            arguments: { itemId: "item_123", isDone: true },
+          },
+        },
+      },
+      shoppingListRemoveItem: {
+        summary: "Remove shopping item",
+        value: {
+          jsonrpc: "2.0",
+          id: 64,
+          method: "tools/call",
+          params: {
+            name: "shoppingList.removeItem",
+            arguments: { itemId: "item_123" },
           },
         },
       },
@@ -208,11 +389,25 @@ export class McpController {
           },
         },
       },
+      selfCareSlotRemove: {
+        summary: "Remove self-care slot",
+        value: {
+          jsonrpc: "2.0",
+          id: 73,
+          method: "tools/call",
+          params: {
+            name: "selfCare.slotRemove",
+            arguments: {
+              slotId: "slot_123",
+            },
+          },
+        },
+      },
       selfCareItemCreate: {
         summary: "Create self-care item",
         value: {
           jsonrpc: "2.0",
-          id: 73,
+          id: 74,
           method: "tools/call",
           params: {
             name: "selfCare.itemCreate",
@@ -230,7 +425,7 @@ export class McpController {
         summary: "Update self-care item",
         value: {
           jsonrpc: "2.0",
-          id: 74,
+          id: 75,
           method: "tools/call",
           params: {
             name: "selfCare.itemUpdate",
@@ -246,7 +441,7 @@ export class McpController {
         summary: "Remove self-care item",
         value: {
           jsonrpc: "2.0",
-          id: 75,
+          id: 76,
           method: "tools/call",
           params: {
             name: "selfCare.itemRemove",
