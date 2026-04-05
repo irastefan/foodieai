@@ -96,7 +96,7 @@ export class MealPlansController {
         anchorDate: { type: "string", example: "2026-02-20" },
         fromDate: { type: "string", example: "2026-01-22" },
         toDate: { type: "string", example: "2026-02-20" },
-        query: { type: ["string", "null"], example: "protein bar" },
+        query: { type: "string", nullable: true, example: "protein bar" },
         items: {
           type: "array",
           items: {
@@ -111,24 +111,27 @@ export class MealPlansController {
               name: { type: "string", example: "Greek yogurt" },
               isManual: { type: "boolean", example: false },
               product: {
-                type: ["object", "null"],
+                type: "object",
+                nullable: true,
                 properties: {
                   id: { type: "string", example: "prod_123" },
                   name: { type: "string", example: "Greek yogurt" },
                 },
               },
               recipe: {
-                type: ["object", "null"],
+                type: "object",
+                nullable: true,
                 properties: {
                   id: { type: "string", example: "rec_123" },
                   title: { type: "string", example: "Protein pancakes" },
                 },
               },
-              amount: { type: ["number", "null"], example: 150 },
-              unit: { type: ["string", "null"], example: "g" },
-              servings: { type: ["number", "null"], example: null },
+              amount: { type: "number", nullable: true, example: 150 },
+              unit: { type: "string", nullable: true, example: "g" },
+              servings: { type: "number", nullable: true, example: null },
               nutritionPer100: {
-                type: ["object", "null"],
+                type: "object",
+                nullable: true,
                 properties: {
                   kcal100: { type: "number", example: 63 },
                   protein100: { type: "number", example: 5.2 },
