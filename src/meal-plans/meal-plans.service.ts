@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AddMealPlanEntryDto } from "./dto/add-meal-plan-entry.dto";
+import { CopyMealPlanSlotDto } from "./dto/copy-meal-plan-slot.dto";
+import { GetMealPlanHistoryDto } from "./dto/get-meal-plan-history.dto";
 
 type NutritionTotals = {
   calories: number;
@@ -225,9 +227,9 @@ export class MealPlansService {
     return this.formatDay(recalculated);
   }
 
-  async getHistory(userId: string, date?: string) {
-    const anchorDate = this.parseDay(date);
-    const range = this.getHistoryRange(anchorDate);
+  async getHistory(userId: string, dto: GetMealPlanHistoryDto = {}) {
+    const range = this.resolveHistoryRange(dto);
+    const query = this.normalizeQuery(dto.query);
     const entries = await (this.prisma as any).mealPlanEntry.findMany({
       where: {
         day: {
@@ -250,6 +252,9 @@ export class MealPlansService {
     const items: MealPlanHistoryItem[] = [];
 
     for (const entry of entries) {
+      if (query && !this.historyEntryMatchesQuery(entry, query)) {
+        continue;
+      }
       const key = this.buildHistoryDedupKey(entry);
       if (seen.has(key)) {
         continue;
@@ -259,11 +264,94 @@ export class MealPlansService {
     }
 
     return {
-      anchorDate: anchorDate.toISOString().slice(0, 10),
+      anchorDate: range.anchor.toISOString().slice(0, 10),
       fromDate: range.from.toISOString().slice(0, 10),
       toDate: range.to.toISOString().slice(0, 10),
+      query,
       items,
     };
+  }
+
+  async copySlot(userId: string, dto: CopyMealPlanSlotDto) {
+    const sourceDate = this.parseDay(dto.sourceDate);
+    const sourceSlot = this.parseSlot(dto.sourceSlot);
+    const targetDate = this.parseDay(dto.targetDate);
+    const targetSlot = this.parseSlot(dto.targetSlot ?? dto.sourceSlot);
+
+    const targetDayId = await this.prisma.$transaction(async (tx) => {
+      const sourceDay = await (tx as any).mealPlanDay.findUnique({
+        where: {
+          ownerUserId_date: {
+            ownerUserId: userId,
+            date: sourceDate,
+          },
+        },
+        include: {
+          entries: {
+            where: { slot: sourceSlot },
+            orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+          },
+        },
+      });
+
+      if (!sourceDay) {
+        throw new NotFoundException({
+          code: "MEAL_PLAN_DAY_NOT_FOUND",
+          message: "Source meal plan day not found",
+          sourceDate: dto.sourceDate,
+        });
+      }
+
+      if (sourceDay.entries.length === 0) {
+        throw new NotFoundException({
+          code: "MEAL_PLAN_SLOT_EMPTY",
+          message: "Source meal slot has no entries to copy",
+          sourceDate: dto.sourceDate,
+          sourceSlot,
+        });
+      }
+
+      const targetDay = await (tx as any).mealPlanDay.upsert({
+        where: {
+          ownerUserId_date: {
+            ownerUserId: userId,
+            date: targetDate,
+          },
+        },
+        update: {},
+        create: {
+          ownerUserId: userId,
+          date: targetDate,
+        },
+      });
+
+      let nextOrder = await this.nextOrderInSlotTx(tx as any, targetDay.id, targetSlot);
+      for (const entry of sourceDay.entries) {
+        await (tx as any).mealPlanEntry.create({
+          data: {
+            dayId: targetDay.id,
+            slot: targetSlot,
+            entryType: entry.entryType,
+            order: nextOrder,
+            customName: entry.customName,
+            productId: entry.productId,
+            recipeId: entry.recipeId,
+            isManual: entry.isManual,
+            amount: entry.amount,
+            unit: entry.unit,
+            servings: entry.servings,
+            nutritionPer100: entry.nutritionPer100 as Prisma.InputJsonValue | undefined,
+            nutritionTotal: entry.nutritionTotal as Prisma.InputJsonValue | undefined,
+          },
+        });
+        nextOrder += 1;
+      }
+
+      return targetDay.id;
+    });
+
+    const recalculated = await this.recalculateDay(targetDayId);
+    return this.formatDay(recalculated);
   }
 
   private async getOrCreateDay(userId: string, date: Date) {
@@ -321,12 +409,42 @@ export class MealPlansService {
     return { from, to };
   }
 
+  private resolveHistoryRange(dto: GetMealPlanHistoryDto) {
+    if (dto.fromDate || dto.toDate) {
+      const anchor = this.parseDay(dto.toDate ?? dto.date);
+      const from = this.parseDay(dto.fromDate ?? dto.toDate ?? dto.date);
+      const to = this.endOfDay(dto.toDate ? this.parseDay(dto.toDate) : anchor);
+      if (from.getTime() > to.getTime()) {
+        throw new BadRequestException("fromDate must be before or equal to toDate");
+      }
+      return { anchor, from, to };
+    }
+
+    const anchor = this.parseDay(dto.date);
+    const range = this.getHistoryRange(anchor);
+    return { anchor, from: range.from, to: range.to };
+  }
+
   private parseSlot(slot: string): MealSlotName {
     const normalized = slot.trim().toUpperCase();
     if (!SLOT_ORDER.includes(normalized as MealSlotName)) {
       throw new BadRequestException("slot must be BREAKFAST, LUNCH, DINNER or SNACK");
     }
     return normalized as MealSlotName;
+  }
+
+  private endOfDay(date: Date) {
+    const value = new Date(date);
+    value.setUTCHours(23, 59, 59, 999);
+    return value;
+  }
+
+  private normalizeQuery(query?: string) {
+    if (typeof query !== "string") {
+      return null;
+    }
+    const value = query.trim().toLowerCase();
+    return value.length > 0 ? value : null;
   }
 
   private resolveMode(dto: AddMealPlanEntryDto): "product" | "recipe" | "manual" {
@@ -556,6 +674,15 @@ export class MealPlansService {
       nutritionPer100: this.parseNutritionPer100(entry.nutritionPer100),
       nutritionTotal: this.parseNutrition(entry.nutritionTotal) ?? this.emptyTotals(),
     };
+  }
+
+  private historyEntryMatchesQuery(entry: any, query: string) {
+    const name = this.getEntryDisplayName(entry).toLowerCase();
+    return name.includes(query);
+  }
+
+  private getEntryDisplayName(entry: any) {
+    return String(entry.customName ?? entry.product?.name ?? entry.recipe?.title ?? "");
   }
 
   private buildHistoryDedupKey(entry: any) {

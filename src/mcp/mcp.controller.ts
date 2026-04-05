@@ -264,7 +264,19 @@ export class McpController {
           jsonrpc: "2.0",
           id: 51,
           method: "tools/call",
-          params: { name: "mealPlan.historyGet", arguments: { date: "2026-02-20" } },
+          params: { name: "mealPlan.historyGet", arguments: { fromDate: "2026-02-01", toDate: "2026-03-01", query: "protein bar" } },
+        },
+      },
+      mealPlanCopySlot: {
+        summary: "Copy meal slot",
+        value: {
+          jsonrpc: "2.0",
+          id: 511,
+          method: "tools/call",
+          params: {
+            name: "mealPlan.copySlot",
+            arguments: { sourceDate: "2026-02-20", sourceSlot: "DINNER", targetDate: "2026-02-21", targetSlot: "LUNCH" },
+          },
         },
       },
       mealPlanAddEntry: {

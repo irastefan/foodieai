@@ -3,6 +3,7 @@ import { Product } from "@prisma/client";
 import { plainToInstance } from "class-transformer";
 import { validate, ValidationError } from "class-validator";
 import { AddMealPlanEntryDto } from "../meal-plans/dto/add-meal-plan-entry.dto";
+import { CopyMealPlanSlotDto } from "../meal-plans/dto/copy-meal-plan-slot.dto";
 import { GetMealPlanDayDto } from "../meal-plans/dto/get-meal-plan-day.dto";
 import { GetMealPlanHistoryDto } from "../meal-plans/dto/get-meal-plan-history.dto";
 import { RemoveMealPlanEntryDto } from "../meal-plans/dto/remove-meal-plan-entry.dto";
@@ -279,6 +280,17 @@ export class McpService {
         args.unit = args.unit.trim().toLowerCase();
       }
     }
+    if (name === "mealPlan.copySlot") {
+      if (typeof args.sourceSlot === "string") {
+        args.sourceSlot = args.sourceSlot.trim().toUpperCase();
+      }
+      if (typeof args.targetSlot === "string") {
+        args.targetSlot = args.targetSlot.trim().toUpperCase();
+      }
+    }
+    if (name === "mealPlan.historyGet" && typeof args.query === "string") {
+      args.query = args.query.trim();
+    }
     if (name === "shoppingList.addItem") {
       if (typeof args.unit === "string") {
         args.unit = args.unit.trim().toLowerCase();
@@ -389,7 +401,7 @@ export class McpService {
               createRecipe: ["recipe.create"],
               findRecipe: ["recipe.search", "recipe.get"],
               manageProducts: ["product.search", "product.createManual"],
-              planMeals: ["mealPlan.dayGet", "mealPlan.historyGet", "mealPlan.addEntry", "mealPlan.removeEntry"],
+              planMeals: ["mealPlan.dayGet", "mealPlan.historyGet", "mealPlan.addEntry", "mealPlan.copySlot", "mealPlan.removeEntry"],
               selfCare: [
                 "selfCare.weekGet",
                 "selfCare.slotCreate",
@@ -410,7 +422,7 @@ export class McpService {
             },
             flows: {
               recipe: ["create -> get"],
-              mealPlan: ["dayGet -> addEntry* -> dayGet"],
+              mealPlan: ["dayGet -> addEntry*/copySlot -> dayGet", "historyGet(query/fromDate/toDate) -> addEntry/copySlot"],
               selfCare: ["weekGet -> slotCreate* -> itemCreate* -> itemUpdate/itemRemove"],
               shoppingList: ["addCategory* -> addItem* -> setItemState/removeItem"],
             },
@@ -458,7 +470,7 @@ export class McpService {
             topic === "products"
               ? "Products:\n- Search products before recipe creation: product.search\n- Add manual product with macros: product.createManual"
               : topic === "meal-plans"
-                ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Get add history: mealPlan.historyGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Remove entry: mealPlan.removeEntry"
+                ? "Meal plans:\n- Get day plan: mealPlan.dayGet\n- Search/add history by range: mealPlan.historyGet\n- Add product or recipe into slot: mealPlan.addEntry\n- Copy a meal slot between days: mealPlan.copySlot\n- Remove entry: mealPlan.removeEntry"
                 : topic === "self-care"
                 ? "Self-care routines:\n- Get full week: selfCare.weekGet\n- Create/update/delete slots: selfCare.slotCreate / selfCare.slotUpdate / selfCare.slotRemove\n- Create/update/delete items: selfCare.itemCreate / selfCare.itemUpdate / selfCare.itemRemove"
                 : topic === "shopping-list"
@@ -885,18 +897,29 @@ export class McpService {
       "mealPlan.historyGet": {
         name: "mealPlan.historyGet",
         description:
-          "Get unique meal plan add history for the last 30 days up to a selected date.\nUse to suggest recently added foods.\nReturns items sorted by added time descending.",
+          "Get unique meal plan add history for a date range, with optional substring search by item name.\nUse to find foods eaten during the last month or any selected period.\nReturns items sorted by added time descending.",
         tags: ["meal-plans"],
         auth: "required",
         public: false,
         inputSchema: {
           type: "object",
           additionalProperties: false,
-          properties: { date: { type: ["string", "null"] } },
+          properties: {
+            date: { type: ["string", "null"] },
+            fromDate: { type: ["string", "null"] },
+            toDate: { type: ["string", "null"] },
+            query: { type: ["string", "null"] },
+          },
           required: [],
         },
         outputSchema: { type: "object" },
-        examples: [{ summary: "Recent meal plan items", arguments: {} }],
+        examples: [
+          { summary: "Recent meal plan items", arguments: {} },
+          {
+            summary: "Search protein bars in a custom period",
+            arguments: { fromDate: "2026-02-01", toDate: "2026-03-01", query: "protein bar" },
+          },
+        ],
         rpcExamples: [
           {
             summary: "tools/call",
@@ -904,7 +927,7 @@ export class McpService {
               jsonrpc: "2.0",
               id: 241,
               method: "tools/call",
-              params: { name: "mealPlan.historyGet", arguments: { date: "2026-02-20" } },
+              params: { name: "mealPlan.historyGet", arguments: { fromDate: "2026-02-01", toDate: "2026-03-01", query: "protein bar" } },
             },
           },
         ],
@@ -914,6 +937,54 @@ export class McpService {
           return {
             text: "✅ Meal plan history loaded",
             json: history,
+          };
+        },
+      },
+      "mealPlan.copySlot": {
+        name: "mealPlan.copySlot",
+        description:
+          "Copy all entries from one meal slot on a source day into a target day slot.\nUse to repeat breakfast/lunch/dinner/snack from another day.\nReturns recalculated target day plan.",
+        tags: ["meal-plans"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            sourceDate: { type: "string" },
+            sourceSlot: { type: "string", enum: ["BREAKFAST", "LUNCH", "DINNER", "SNACK"] },
+            targetDate: { type: "string" },
+            targetSlot: { type: ["string", "null"], enum: ["BREAKFAST", "LUNCH", "DINNER", "SNACK", null] },
+          },
+          required: ["sourceDate", "sourceSlot", "targetDate"],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          {
+            summary: "Copy breakfast to tomorrow",
+            arguments: { sourceDate: "2026-02-20", sourceSlot: "BREAKFAST", targetDate: "2026-02-21" },
+          },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 242,
+              method: "tools/call",
+              params: {
+                name: "mealPlan.copySlot",
+                arguments: { sourceDate: "2026-02-20", sourceSlot: "DINNER", targetDate: "2026-02-21", targetSlot: "LUNCH" },
+              },
+            },
+          },
+        ],
+        dtoClass: CopyMealPlanSlotDto,
+        handler: async (args, context) => {
+          const day = await this.copyMealPlanSlot(context.userId as string, args);
+          return {
+            text: "✅ Meal slot copied",
+            json: day,
           };
         },
       },
@@ -1599,7 +1670,12 @@ export class McpService {
 
   async getMealPlanHistory(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateMcpDto(GetMealPlanHistoryDto, args);
-    return this.mealPlansService.getHistory(userId, dto.date);
+    return this.mealPlansService.getHistory(userId, dto);
+  }
+
+  async copyMealPlanSlot(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateMcpDto(CopyMealPlanSlotDto, args);
+    return this.mealPlansService.copySlot(userId, dto);
   }
 
   async addMealPlanEntry(userId: string, args: Record<string, unknown>) {
