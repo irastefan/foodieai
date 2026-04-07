@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post, Put, Query } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
 import { BodyMetricsEntryResponseDto } from "./dto/body-metrics-response.dto";
 import { EmptyBodyDto } from "./dto/empty-body.dto";
@@ -48,6 +48,7 @@ const profileExample = {
 
 @ApiTags("users")
 @ApiBearerAuth("bearer")
+@ApiExtraModels(UserMeResponseDto, UserProfileResponseDto)
 @Controller("v1")
 export class UsersController {
   constructor(
