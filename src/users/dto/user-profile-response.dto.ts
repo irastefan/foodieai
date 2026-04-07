@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { ActivityLevel, GoalType, Sex, TargetFormula } from "@prisma/client";
+import { MacroProfile } from "../../tdee/macro-profile";
 
 class TargetFormulaOptionDto {
   @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
@@ -45,6 +46,9 @@ export class UserProfileResponseDto {
 
   @ApiPropertyOptional({ enum: GoalType, nullable: true })
   goal!: GoalType | null;
+
+  @ApiProperty({ enum: MacroProfile, example: MacroProfile.BALANCED })
+  macroProfile!: MacroProfile;
 
   @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
   targetFormula!: TargetFormula;

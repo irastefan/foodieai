@@ -1,0 +1,4 @@
+CREATE TYPE "MacroProfile" AS ENUM ('BALANCED', 'HIGH_PROTEIN', 'LOW_CARB', 'HIGH_CARB');
+
+ALTER TABLE "UserProfile"
+ADD COLUMN "macroProfile" "MacroProfile" NOT NULL DEFAULT 'BALANCED';

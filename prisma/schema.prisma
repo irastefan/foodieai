@@ -54,6 +54,13 @@ enum TargetFormula {
   OWEN
 }
 
+enum MacroProfile {
+  BALANCED
+  HIGH_PROTEIN
+  LOW_CARB
+  HIGH_CARB
+}
+
 enum MealSlot {
   BREAKFAST
   LUNCH
@@ -107,6 +114,7 @@ model UserProfile {
   activityLevel ActivityLevel?
   goal          GoalType?      @default(MAINTAIN)
   targetFormula TargetFormula  @default(MIFFLIN_ST_JEOR)
+  macroProfile  MacroProfile   @default(BALANCED)
 
   targetCalories Int?
   targetProteinG Int?

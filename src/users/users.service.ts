@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ActivityLevel, GoalType, ProductScope, RecipeVisibility, Sex, TargetFormula } from "@prisma/client";
+import { MacroProfile } from "../tdee/macro-profile";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { TdeeService } from "../tdee/tdee.service";
 
@@ -12,6 +13,7 @@ export type UpsertProfileInput = {
   weightKg?: number;
   activityLevel?: ActivityLevel;
   goal?: GoalType;
+  macroProfile?: MacroProfile;
   targetFormula?: TargetFormula;
   calorieDelta?: number;
 };
@@ -128,6 +130,7 @@ export class UsersService {
         weightKg: input.weightKg ?? null,
         activityLevel: input.activityLevel ?? null,
         goal: input.goal ?? null,
+        macroProfile: input.macroProfile ?? MacroProfile.BALANCED,
         targetFormula: input.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
         calorieDelta: input.calorieDelta ?? null,
       },
@@ -140,6 +143,7 @@ export class UsersService {
         weightKg: input.weightKg ?? undefined,
         activityLevel: input.activityLevel ?? undefined,
         goal: input.goal ?? undefined,
+        macroProfile: input.macroProfile ?? undefined,
         targetFormula: input.targetFormula ?? undefined,
         calorieDelta: input.calorieDelta ?? undefined,
       },
@@ -278,6 +282,7 @@ export class UsersService {
       weightKg: number | null;
       activityLevel: ActivityLevel | null;
       goal: GoalType | null;
+      macroProfile: MacroProfile | null;
       targetFormula: TargetFormula | null;
       calorieDelta: number | null;
     },
@@ -300,6 +305,7 @@ export class UsersService {
       weightKg: profile.weightKg as number,
       activityLevel: profile.activityLevel as ActivityLevel,
       goal: profile.goal ?? GoalType.MAINTAIN,
+      macroProfile: profile.macroProfile ?? MacroProfile.BALANCED,
       targetFormula: profile.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
       calorieDelta: profile.calorieDelta ?? undefined,
     });
@@ -478,7 +484,10 @@ export class UsersService {
     return { from, to };
   }
 
-  private attachProfileMetadata<T extends { targetFormula?: TargetFormula | null } | null>(
+  private attachProfileMetadata<T extends {
+    targetFormula?: TargetFormula | null;
+    macroProfile?: MacroProfile | null;
+  } | null>(
     profile: T,
   ) {
     if (!profile) {
@@ -487,6 +496,7 @@ export class UsersService {
     return {
       ...profile,
       targetFormula: profile.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR,
+      macroProfile: profile.macroProfile ?? MacroProfile.BALANCED,
       availableTargetFormulas: this.tdeeService.getFormulaOptions(),
     };
   }

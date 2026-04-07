@@ -11,6 +11,7 @@ const profile = {
   weightKg: 63,
   activityLevel: "MODERATE",
   goal: "LOSE",
+  macroProfile: "BALANCED",
   targetFormula: "MIFFLIN_ST_JEOR",
   calorieDelta: 400,
   targetCalories: 1714,
@@ -26,6 +27,7 @@ assert.ok(result.profile, "profile should exist");
 assert.ok(result.targets, "targets should exist");
 assert.strictEqual(result.profile.firstName, "Ira");
 assert.strictEqual(result.profile.targetFormula, "MIFFLIN_ST_JEOR");
+assert.strictEqual(result.profile.macroProfile, "BALANCED");
 assert.ok(result.profile.availableTargetFormulas.length >= 3);
 assert.strictEqual(result.targets.kcal, 1714);
 assert.ok(!("id" in (result as unknown as Record<string, unknown>)), "no id at top level");

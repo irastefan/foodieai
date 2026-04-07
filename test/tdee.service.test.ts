@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import { ActivityLevel, GoalType, Sex, TargetFormula } from "@prisma/client";
 import { TdeeService } from "../src/tdee/tdee.service";
+import { MacroProfile } from "../src/tdee/macro-profile";
 
 const service = new TdeeService();
 
@@ -78,6 +79,18 @@ const veryActive = service.calculateTargets({
   activityLevel: ActivityLevel.VERY_ACTIVE,
   asOfDate: new Date(Date.UTC(2026, 3, 7)),
 });
+const lowCarb = service.calculateTargets({
+  ...baseInput,
+  goal: GoalType.MAINTAIN,
+  macroProfile: MacroProfile.LOW_CARB,
+  asOfDate: new Date(Date.UTC(2026, 3, 7)),
+});
+const highCarb = service.calculateTargets({
+  ...baseInput,
+  goal: GoalType.MAINTAIN,
+  macroProfile: MacroProfile.HIGH_CARB,
+  asOfDate: new Date(Date.UTC(2026, 3, 7)),
+});
 
 assert.ok(
   explicitDelta.targetCalories > gain.targetCalories,
@@ -97,8 +110,12 @@ assert.ok(
   veryActive.targetCalories > maintain.targetCalories,
   "very active factor should produce higher calories than moderate",
 );
+assert.ok(lowCarb.targetFatG > maintain.targetFatG, "low carb should allocate more fat");
+assert.ok(lowCarb.targetCarbsG < maintain.targetCarbsG, "low carb should allocate fewer carbs");
+assert.ok(highCarb.targetCarbsG > maintain.targetCarbsG, "high carb should allocate more carbs");
+assert.ok(highCarb.targetFatG < maintain.targetFatG, "high carb should allocate less fat");
 
-for (const result of [maintain, lose, gain]) {
+for (const result of [maintain, lose, gain, lowCarb, highCarb]) {
   const macroCalories =
     result.targetProteinG * 4 + result.targetFatG * 9 + result.targetCarbsG * 4;
   assert.strictEqual(macroCalories, result.targetCalories, "target calories should equal macro calories");

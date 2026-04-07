@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ActivityLevel, GoalType, Sex, TargetFormula } from "@prisma/client";
 import { DEFAULT_TARGET_FORMULA, TARGET_FORMULAS } from "./tdee.constants";
+import { MacroProfile } from "./macro-profile";
 
 type TargetInput = {
   sex: Sex;
@@ -9,6 +10,7 @@ type TargetInput = {
   weightKg: number;
   activityLevel: ActivityLevel;
   goal: GoalType;
+  macroProfile?: MacroProfile;
   targetFormula?: TargetFormula;
   calorieDelta?: number;
   asOfDate?: Date;
@@ -28,6 +30,7 @@ export class TdeeService {
     );
     const factor = this.activityFactor(input.activityLevel);
     const tdee = bmr * factor;
+    const macroProfile = input.macroProfile ?? MacroProfile.BALANCED;
 
     const baseCalories = this.normalizeTargetCalories(
       Math.round(tdee),
@@ -45,6 +48,7 @@ export class TdeeService {
       desiredCalories,
       input.goal,
       input.activityLevel,
+      macroProfile,
     );
     const targetCalories = this.macroCalories(proteinG, fatG, carbsG);
 
@@ -53,6 +57,7 @@ export class TdeeService {
       targetProteinG: proteinG,
       targetFatG: fatG,
       targetCarbsG: carbsG,
+      macroProfile,
       targetFormula: formula,
     };
   }
@@ -105,26 +110,17 @@ export class TdeeService {
     targetCalories: number,
     goal: GoalType,
     activityLevel: ActivityLevel,
+    macroProfile: MacroProfile,
   ) {
-    const proteinTargetPerKg =
-      goal === GoalType.LOSE
-        ? 2
-        : goal === GoalType.GAIN
-          ? 1.8
-          : 1.6;
-    const fatTargetPerKg =
-      goal === GoalType.LOSE
-        ? 0.8
-        : goal === GoalType.GAIN
-          ? 0.8
-          : 0.9;
+    const { proteinTargetPerKg, fatTargetPerKg, carbFloorPerKg } =
+      this.macroProfileTargets(goal, macroProfile);
     const fatMinPerKg = 0.6;
 
     const proteinG = Math.round(weightKg * proteinTargetPerKg);
     const fatMinG = Math.ceil(weightKg * fatMinPerKg);
     const fatTargetG = Math.round(weightKg * fatTargetPerKg);
     const fatG = Math.max(fatTargetG, fatMinG);
-    const carbFloorG = this.minimumCarbs(weightKg, activityLevel, goal);
+    const carbFloorG = this.minimumCarbs(weightKg, activityLevel, goal, carbFloorPerKg);
 
     const carbsG = Math.max(carbFloorG, this.caloriesToCarbs(targetCalories, proteinG, fatG));
     return { proteinG, fatG, carbsG };
@@ -142,17 +138,56 @@ export class TdeeService {
     weightKg: number,
     activityLevel: ActivityLevel,
     goal: GoalType,
+    carbFloorPerKg: number,
   ) {
-    if (goal !== GoalType.GAIN) {
+    if (carbFloorPerKg <= 0) {
       return 0;
     }
-    if (activityLevel === ActivityLevel.VERY_ACTIVE) {
-      return Math.round(weightKg * 0.75);
+
+    const activityMultiplier =
+      activityLevel === ActivityLevel.VERY_ACTIVE
+        ? 1.15
+        : activityLevel === ActivityLevel.MODERATE
+          ? 1
+          : 0.85;
+    const goalAdjustment = goal === GoalType.GAIN ? 1.1 : 1;
+
+    return Math.round(weightKg * carbFloorPerKg * activityMultiplier * goalAdjustment);
+  }
+
+  private macroProfileTargets(goal: GoalType, macroProfile: MacroProfile) {
+    switch (macroProfile) {
+      case MacroProfile.HIGH_PROTEIN:
+        return {
+          proteinTargetPerKg:
+            goal === GoalType.LOSE ? 2.2 : goal === GoalType.GAIN ? 2 : 1.9,
+          fatTargetPerKg: 0.8,
+          carbFloorPerKg: 0,
+        };
+      case MacroProfile.LOW_CARB:
+        return {
+          proteinTargetPerKg:
+            goal === GoalType.LOSE ? 2.1 : goal === GoalType.GAIN ? 1.9 : 1.8,
+          fatTargetPerKg: goal === GoalType.GAIN ? 1 : 0.95,
+          carbFloorPerKg: 0.3,
+        };
+      case MacroProfile.HIGH_CARB:
+        return {
+          proteinTargetPerKg:
+            goal === GoalType.LOSE ? 1.8 : goal === GoalType.GAIN ? 1.6 : 1.5,
+          fatTargetPerKg: 0.7,
+          carbFloorPerKg: 1,
+        };
+      case MacroProfile.BALANCED:
+      default:
+        return {
+          proteinTargetPerKg:
+            goal === GoalType.LOSE ? 2 : goal === GoalType.GAIN ? 1.8 : 1.6,
+          fatTargetPerKg:
+            goal === GoalType.LOSE ? 0.8 : goal === GoalType.GAIN ? 0.8 : 0.9,
+          carbFloorPerKg: goal === GoalType.GAIN ? 0.5 : 0,
+        };
     }
-    if (activityLevel === ActivityLevel.MODERATE) {
-      return Math.round(weightKg * 0.5);
-    }
-    return 0;
   }
 
   private normalizeTargetCalories(

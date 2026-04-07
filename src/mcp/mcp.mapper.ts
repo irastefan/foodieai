@@ -31,6 +31,7 @@ export type UserMeProfile = {
   weightKg: number | null;
   activityLevel: string | null;
   goal: string | null;
+  macroProfile: string;
   targetFormula: string;
   calorieDelta: number | null;
   availableTargetFormulas: Array<{
@@ -94,6 +95,7 @@ type ProfileLike = {
   weightKg: number | null;
   activityLevel: string | null;
   goal: string | null;
+  macroProfile?: string | null;
   targetFormula?: string | null;
   calorieDelta: number | null;
   targetCalories: number | null;
@@ -121,6 +123,7 @@ export function formatUserMe(profile: ProfileLike | null): UserMeResult {
       weightKg: profile?.weightKg ?? null,
       activityLevel: profile?.activityLevel ?? null,
       goal: profile?.goal ?? null,
+      macroProfile: profile?.macroProfile ?? "BALANCED",
       targetFormula: profile?.targetFormula ?? "MIFFLIN_ST_JEOR",
       calorieDelta: profile?.calorieDelta ?? null,
       availableTargetFormulas: profile?.availableTargetFormulas ?? TARGET_FORMULAS.map((formula) => ({ ...formula })),
