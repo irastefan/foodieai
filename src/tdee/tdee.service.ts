@@ -11,13 +11,13 @@ type TargetInput = {
   goal: GoalType;
   targetFormula?: TargetFormula;
   calorieDelta?: number;
+  asOfDate?: Date;
 };
 
 @Injectable()
 export class TdeeService {
-  // Deterministic calorie and macro calculator (Mifflin-St Jeor).
   calculateTargets(input: TargetInput) {
-    const ageYears = this.calculateAgeYears(input.birthDate);
+    const ageYears = this.calculateAgeYears(input.birthDate, input.asOfDate);
     const formula = input.targetFormula ?? TargetFormula.MIFFLIN_ST_JEOR;
     const bmr = this.calculateBmr(
       formula,
@@ -29,24 +29,24 @@ export class TdeeService {
     const factor = this.activityFactor(input.activityLevel);
     const tdee = bmr * factor;
 
-    const delta =
-      input.calorieDelta ??
-      (input.goal === GoalType.LOSE
-        ? -400
-        : input.goal === GoalType.GAIN
-          ? 250
-          : 0);
-
-    const targetCalories = Math.round(tdee + delta);
-
-    const proteinG = Math.round(
-      input.weightKg * (input.goal === GoalType.GAIN ? 1.8 : 1.6),
+    const baseCalories = this.normalizeTargetCalories(
+      Math.round(tdee),
+      bmr,
+      input.sex,
     );
-    const fatG = Math.round(input.weightKg * 0.8);
-    const carbsG = Math.max(
-      0,
-      Math.round((targetCalories - proteinG * 4 - fatG * 9) / 4),
+    const delta = this.resolveCalorieDelta(input.goal, input.calorieDelta);
+    const desiredCalories = this.normalizeTargetCalories(
+      baseCalories + delta,
+      bmr,
+      input.sex,
     );
+    const { proteinG, fatG, carbsG } = this.calculateMacroTargets(
+      input.weightKg,
+      desiredCalories,
+      input.goal,
+      input.activityLevel,
+    );
+    const targetCalories = this.macroCalories(proteinG, fatG, carbsG);
 
     return {
       targetCalories,
@@ -100,6 +100,91 @@ export class TdeeService {
     }
   }
 
+  private calculateMacroTargets(
+    weightKg: number,
+    targetCalories: number,
+    goal: GoalType,
+    activityLevel: ActivityLevel,
+  ) {
+    const proteinTargetPerKg =
+      goal === GoalType.LOSE
+        ? 2
+        : goal === GoalType.GAIN
+          ? 1.8
+          : 1.6;
+    const fatTargetPerKg =
+      goal === GoalType.LOSE
+        ? 0.8
+        : goal === GoalType.GAIN
+          ? 0.8
+          : 0.9;
+    const fatMinPerKg = 0.6;
+
+    const proteinG = Math.round(weightKg * proteinTargetPerKg);
+    const fatMinG = Math.ceil(weightKg * fatMinPerKg);
+    const fatTargetG = Math.round(weightKg * fatTargetPerKg);
+    const fatG = Math.max(fatTargetG, fatMinG);
+    const carbFloorG = this.minimumCarbs(weightKg, activityLevel, goal);
+
+    const carbsG = Math.max(carbFloorG, this.caloriesToCarbs(targetCalories, proteinG, fatG));
+    return { proteinG, fatG, carbsG };
+  }
+
+  private caloriesToCarbs(targetCalories: number, proteinG: number, fatG: number) {
+    return Math.max(0, Math.floor((targetCalories - proteinG * 4 - fatG * 9) / 4));
+  }
+
+  private macroCalories(proteinG: number, fatG: number, carbsG: number) {
+    return proteinG * 4 + fatG * 9 + carbsG * 4;
+  }
+
+  private minimumCarbs(
+    weightKg: number,
+    activityLevel: ActivityLevel,
+    goal: GoalType,
+  ) {
+    if (goal !== GoalType.GAIN) {
+      return 0;
+    }
+    if (activityLevel === ActivityLevel.VERY_ACTIVE) {
+      return Math.round(weightKg * 0.75);
+    }
+    if (activityLevel === ActivityLevel.MODERATE) {
+      return Math.round(weightKg * 0.5);
+    }
+    return 0;
+  }
+
+  private normalizeTargetCalories(
+    calculatedCalories: number,
+    bmr: number,
+    sex: Sex,
+  ) {
+    const sexFloor = sex === Sex.MALE ? 1500 : 1200;
+    const bmrFloor = Math.round(bmr);
+
+    return Math.max(calculatedCalories, sexFloor, bmrFloor);
+  }
+
+  private resolveCalorieDelta(goal: GoalType, calorieDelta?: number) {
+    const baseDelta = Math.abs(
+      calorieDelta ??
+      (goal === GoalType.LOSE
+        ? 400
+        : goal === GoalType.GAIN
+          ? 250
+          : 0),
+    );
+
+    if (goal === GoalType.LOSE) {
+      return -baseDelta;
+    }
+    if (goal === GoalType.GAIN) {
+      return baseDelta;
+    }
+    return 0;
+  }
+
   private calculateBmrMifflin(
     sex: Sex,
     heightCm: number,
@@ -149,17 +234,32 @@ export class TdeeService {
       case ActivityLevel.MODERATE:
         return 1.55;
       case ActivityLevel.VERY_ACTIVE:
-        return 1.725;
+        return 1.9;
       default:
         return 1.2;
     }
   }
 
-  private calculateAgeYears(birthDate: Date) {
-    const now = new Date();
-    let years = now.getUTCFullYear() - birthDate.getUTCFullYear();
-    const monthDiff = now.getUTCMonth() - birthDate.getUTCMonth();
-    const dayDiff = now.getUTCDate() - birthDate.getUTCDate();
+  private calculateAgeYears(birthDate: Date, asOfDate = new Date()) {
+    const birth = new Date(birthDate);
+    const now = new Date(asOfDate);
+    if (Number.isNaN(birth.getTime())) {
+      throw new Error("birthDate is invalid");
+    }
+    if (birth.getTime() > now.getTime()) {
+      throw new Error("birthDate cannot be in the future");
+    }
+
+    const birthYear = birth.getUTCFullYear();
+    const birthMonth = birth.getUTCMonth();
+    const birthDay = birth.getUTCDate();
+    const nowYear = now.getUTCFullYear();
+    const nowMonth = now.getUTCMonth();
+    const nowDay = now.getUTCDate();
+
+    let years = nowYear - birthYear;
+    const monthDiff = nowMonth - birthMonth;
+    const dayDiff = nowDay - birthDay;
     if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
       years -= 1;
     }

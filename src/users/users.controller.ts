@@ -12,6 +12,39 @@ import { UserMeResponseDto } from "./dto/user-me-response.dto";
 import { UserProfileResponseDto } from "./dto/user-profile-response.dto";
 import { UsersService } from "./users.service";
 
+const profileExample = {
+  id: "profile_123",
+  userId: "user_123",
+  firstName: "Ira",
+  lastName: "Stefan",
+  sex: "FEMALE",
+  birthDate: "1994-05-10T00:00:00.000Z",
+  heightCm: 168,
+  weightKg: 63,
+  activityLevel: "MODERATE",
+  goal: "LOSE",
+  targetFormula: "MIFFLIN_ST_JEOR",
+  calorieDelta: 400,
+  targetCalories: 1714,
+  targetProteinG: 126,
+  targetFatG: 50,
+  targetCarbsG: 190,
+  availableTargetFormulas: [
+    {
+      value: "MIFFLIN_ST_JEOR",
+      label: "Mifflin-St Jeor",
+      description: "Modern default for BMR/TDEE based on sex, age, height, and weight.",
+      isDefault: true,
+    },
+    {
+      value: "HARRIS_BENEDICT_REVISED",
+      label: "Harris-Benedict Revised",
+      description: "Updated Harris-Benedict variant with revised coefficients.",
+      isDefault: false,
+    },
+  ],
+};
+
 @ApiTags("users")
 @ApiBearerAuth("bearer")
 @Controller("v1")
@@ -28,7 +61,16 @@ export class UsersController {
   })
   @ApiOkResponse({
     description: "Current user with profile",
-    type: UserMeResponseDto,
+    schema: {
+      allOf: [
+        { $ref: "#/components/schemas/UserMeResponseDto" },
+      ],
+      example: {
+        id: "user_123",
+        email: "ira@example.com",
+        profile: profileExample,
+      },
+    },
   })
   async getMe(@Headers() headers: Record<string, string | string[] | undefined>) {
     const userId = await this.authContext.getUserId(headers);
@@ -55,14 +97,19 @@ export class UsersController {
           activityLevel: "MODERATE",
           goal: "LOSE",
           targetFormula: "MIFFLIN_ST_JEOR",
-          calorieDelta: -400,
+          calorieDelta: 400,
         },
       },
     },
   })
   @ApiOkResponse({
     description: "Saved profile",
-    type: UserProfileResponseDto,
+    schema: {
+      allOf: [
+        { $ref: "#/components/schemas/UserProfileResponseDto" },
+      ],
+      example: profileExample,
+    },
   })
   async upsertProfile(
     @Headers() headers: Record<string, string | string[] | undefined>,
@@ -88,7 +135,12 @@ export class UsersController {
   })
   @ApiOkResponse({
     description: "Profile with recalculated targets",
-    type: UserProfileResponseDto,
+    schema: {
+      allOf: [
+        { $ref: "#/components/schemas/UserProfileResponseDto" },
+      ],
+      example: profileExample,
+    },
   })
   async recalculateTargets(
     @Headers() headers: Record<string, string | string[] | undefined>,

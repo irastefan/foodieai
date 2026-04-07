@@ -368,6 +368,9 @@ export class UsersService {
     ) {
       throw new BadRequestException("birthDate is invalid");
     }
+    if (date.getTime() > Date.now()) {
+      throw new BadRequestException("birthDate cannot be in the future");
+    }
     return date;
   }
 

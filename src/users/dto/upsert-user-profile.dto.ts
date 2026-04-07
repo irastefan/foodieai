@@ -50,7 +50,7 @@ export class UpsertUserProfileDto {
   @IsEnum(TargetFormula)
   targetFormula?: TargetFormula;
 
-  @ApiPropertyOptional({ example: -400 })
+  @ApiPropertyOptional({ example: 400 })
   @IsOptional()
   @IsInt()
   calorieDelta?: number;

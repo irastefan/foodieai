@@ -49,19 +49,19 @@ export class UserProfileResponseDto {
   @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
   targetFormula!: TargetFormula;
 
-  @ApiPropertyOptional({ example: -400, nullable: true })
+  @ApiPropertyOptional({ example: 400, nullable: true })
   calorieDelta!: number | null;
 
-  @ApiPropertyOptional({ example: 1850, nullable: true })
+  @ApiPropertyOptional({ example: 1714, nullable: true })
   targetCalories!: number | null;
 
-  @ApiPropertyOptional({ example: 120, nullable: true })
+  @ApiPropertyOptional({ example: 126, nullable: true })
   targetProteinG!: number | null;
 
-  @ApiPropertyOptional({ example: 55, nullable: true })
+  @ApiPropertyOptional({ example: 50, nullable: true })
   targetFatG!: number | null;
 
-  @ApiPropertyOptional({ example: 210, nullable: true })
+  @ApiPropertyOptional({ example: 190, nullable: true })
   targetCarbsG!: number | null;
 
   @ApiProperty({ type: [TargetFormulaOptionDto] })
