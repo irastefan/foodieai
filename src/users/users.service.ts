@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { AiSubscriptionsService } from "../ai-access/ai-subscriptions.service";
 import { ActivityLevel, GoalType, ProductScope, RecipeVisibility, Sex, TargetFormula } from "@prisma/client";
 import { MacroProfile } from "../tdee/macro-profile";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -68,10 +69,11 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tdeeService: TdeeService,
+    private readonly aiSubscriptionsService: AiSubscriptionsService,
   ) {}
 
   async createWithEmail(email: string, passwordHash: string) {
-    return (this.prisma as any).user.create({
+    const user = await (this.prisma as any).user.create({
       data: {
         email,
         passwordHash,
@@ -79,6 +81,8 @@ export class UsersService {
       },
       select: { id: true, email: true },
     });
+    await this.aiSubscriptionsService.initializeForNewUser(user.id);
+    return user;
   }
 
   async findByEmail(email: string) {
@@ -164,6 +168,11 @@ export class UsersService {
       ]);
     }
     return this.recalculateIfPossible(userId, profile, true);
+  }
+
+  async getAiUsageSummary(userId: string) {
+    await this.ensureUserExists(userId);
+    return this.aiSubscriptionsService.getUsageSummary(userId);
   }
 
   async getProductsByUser(ownerUserId: string, viewerUserId?: string) {

@@ -53,10 +53,14 @@ export class UserProfileResponseDto {
   @ApiProperty({ enum: TargetFormula, example: TargetFormula.MIFFLIN_ST_JEOR })
   targetFormula!: TargetFormula;
 
-  @ApiPropertyOptional({ example: 400, nullable: true })
+  @ApiPropertyOptional({
+    example: 200,
+    nullable: true,
+    description: "Stored calorie adjustment magnitude. Defaults: LOSE = 200, GAIN = 200, MAINTAIN = 0. Backend applies the sign from goal.",
+  })
   calorieDelta!: number | null;
 
-  @ApiPropertyOptional({ example: 1714, nullable: true })
+  @ApiPropertyOptional({ example: 1914, nullable: true })
   targetCalories!: number | null;
 
   @ApiPropertyOptional({ example: 126, nullable: true })
@@ -65,7 +69,7 @@ export class UserProfileResponseDto {
   @ApiPropertyOptional({ example: 50, nullable: true })
   targetFatG!: number | null;
 
-  @ApiPropertyOptional({ example: 190, nullable: true })
+  @ApiPropertyOptional({ example: 240, nullable: true })
   targetCarbsG!: number | null;
 
   @ApiProperty({ type: [TargetFormulaOptionDto] })

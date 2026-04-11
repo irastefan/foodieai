@@ -10,7 +10,7 @@ export class AuthContextService {
   ) {}
 
   async getUserId(headers: Record<string, string | string[] | undefined>) {
-    const token = this.extractBearerToken(headers);
+    const token = this.getAccessToken(headers);
     const payload = this.authService.verifyAccessToken(token);
     const user = await this.usersService.getById(payload.userId);
     if (!user) {
@@ -28,7 +28,7 @@ export class AuthContextService {
     return this.getUserId(headers);
   }
 
-  private extractBearerToken(headers: Record<string, string | string[] | undefined>) {
+  getAccessToken(headers: Record<string, string | string[] | undefined>) {
     const raw = headers["authorization"];
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (!value || !value.startsWith("Bearer ")) {

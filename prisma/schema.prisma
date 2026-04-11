@@ -61,6 +61,20 @@ enum MacroProfile {
   HIGH_CARB
 }
 
+enum SubscriptionStatus {
+  FREE
+  TRIAL
+  ACTIVE
+  EXPIRED
+}
+
+enum AiFeature {
+  RECIPE_GENERATION
+  MEAL_ANALYSIS
+  SMART_PRODUCT_MATCH
+  ADVANCED_AI_TOOLS
+}
+
 enum MealSlot {
   BREAKFAST
   LUNCH
@@ -90,6 +104,8 @@ model User {
   externalId         String?            @unique
   createdAt          DateTime           @default(now())
   profile            UserProfile?
+  aiSubscription     UserAiSubscription?
+  aiUsageLogs        AiUsageLog[]
   bodyMetricEntries  UserBodyMetricEntry[]
   mealPlanDays       MealPlanDay[]
   shoppingLists      ShoppingList[]
@@ -124,6 +140,70 @@ model UserProfile {
   calorieDelta  Int?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model AiPlan {
+  id                String               @id @default(cuid())
+  name              String
+  code              String               @unique
+  monthlyTokenLimit Int
+  monthlyAiActions  Int?
+  priceCents        Int
+  currency          String               @default("USD")
+  isActive          Boolean              @default(true)
+  features          AiPlanFeature[]
+  subscriptions     UserAiSubscription[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model AiPlanFeature {
+  id        String    @id @default(cuid())
+  planId    String
+  plan      AiPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature   AiFeature
+  createdAt DateTime  @default(now())
+
+  @@unique([planId, feature])
+  @@index([feature])
+}
+
+model UserAiSubscription {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionStatus SubscriptionStatus @default(FREE)
+  planId             String?
+  plan               AiPlan?            @relation(fields: [planId], references: [id], onDelete: SetNull)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  tokensUsed         Int                @default(0)
+  tokensLimit        Int                @default(0)
+  trialStartedAt     DateTime?
+  trialEndsAt        DateTime?
+  trialTokenLimit    Int?
+  usageLogs          AiUsageLog[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model AiUsageLog {
+  id               String     @id @default(cuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId   String?
+  subscription     UserAiSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  actionType       String
+  feature          AiFeature?
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int
+  model            String
+  createdAt        DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([subscriptionId, createdAt])
+  @@index([feature, createdAt])
 }
 
 model UserBodyMetricEntry {

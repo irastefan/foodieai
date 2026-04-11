@@ -56,7 +56,10 @@ export class UpsertUserProfileDto {
   @IsEnum(TargetFormula)
   targetFormula?: TargetFormula;
 
-  @ApiPropertyOptional({ example: 400 })
+  @ApiPropertyOptional({
+    example: 200,
+    description: "Positive calorie adjustment magnitude. Defaults: LOSE = 200, GAIN = 200, MAINTAIN = 0. Sign is derived from goal on the backend.",
+  })
   @IsOptional()
   @IsInt()
   calorieDelta?: number;

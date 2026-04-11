@@ -205,9 +205,9 @@ export class TdeeService {
     const baseDelta = Math.abs(
       calorieDelta ??
       (goal === GoalType.LOSE
-        ? 400
+        ? 200
         : goal === GoalType.GAIN
-          ? 250
+          ? 200
           : 0),
     );
 

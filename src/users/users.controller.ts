@@ -1,3 +1,4 @@
+import { AiUsageResponseDto } from "../ai-access/dto/ai-usage-response.dto";
 import { Body, Controller, Get, Headers, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { AuthContextService } from "../auth/auth-context.service";
@@ -25,11 +26,11 @@ const profileExample = {
   goal: "LOSE",
   macroProfile: "BALANCED",
   targetFormula: "MIFFLIN_ST_JEOR",
-  calorieDelta: 400,
-  targetCalories: 1714,
+  calorieDelta: 200,
+  targetCalories: 1914,
   targetProteinG: 126,
   targetFatG: 50,
-  targetCarbsG: 190,
+  targetCarbsG: 240,
   availableTargetFormulas: [
     {
       value: "MIFFLIN_ST_JEOR",
@@ -48,7 +49,7 @@ const profileExample = {
 
 @ApiTags("users")
 @ApiBearerAuth("bearer")
-@ApiExtraModels(UserMeResponseDto, UserProfileResponseDto)
+@ApiExtraModels(UserMeResponseDto, UserProfileResponseDto, AiUsageResponseDto)
 @Controller("v1")
 export class UsersController {
   constructor(
@@ -100,7 +101,7 @@ export class UsersController {
           goal: "LOSE",
           macroProfile: "BALANCED",
           targetFormula: "MIFFLIN_ST_JEOR",
-          calorieDelta: 400,
+          calorieDelta: 200,
         },
       },
     },
@@ -150,6 +151,52 @@ export class UsersController {
   ) {
     const userId = await this.authContext.getUserId(headers);
     return this.usersService.recalculateTargets(userId);
+  }
+
+  @Get("me/ai-usage")
+  @ApiOperation({
+    summary: "Get AI subscription and usage state",
+    description: "Returns current subscription, monthly AI quota usage, derived AI actions, and available AI features.",
+  })
+  @ApiOkResponse({
+    description: "AI usage state",
+    schema: {
+      allOf: [
+        { $ref: "#/components/schemas/AiUsageResponseDto" },
+      ],
+      example: {
+        subscriptionStatus: "TRIAL",
+        currentPlan: {
+          id: "plan_pro",
+          name: "Pro",
+          code: "pro",
+          monthlyTokenLimit: 500000,
+          monthlyAiActions: 100,
+          priceCents: 999,
+          currency: "USD",
+          isActive: true,
+        },
+        currentPeriodStart: "2026-04-10T12:00:00.000Z",
+        currentPeriodEnd: "2026-05-10T12:00:00.000Z",
+        tokensUsed: 25000,
+        tokensLimit: 100000,
+        tokensRemaining: 75000,
+        aiActionsUsed: 5,
+        aiActionsRemaining: 15,
+        availableFeatures: [
+          "RECIPE_GENERATION",
+          "MEAL_ANALYSIS",
+          "SMART_PRODUCT_MATCH",
+          "ADVANCED_AI_TOOLS",
+        ],
+        trialStartedAt: "2026-04-10T12:00:00.000Z",
+        trialEndsAt: "2026-04-24T12:00:00.000Z",
+      },
+    },
+  })
+  async getAiUsage(@Headers() headers: Record<string, string | string[] | undefined>) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.usersService.getAiUsageSummary(userId);
   }
 
   @Get("body-metrics/daily")

@@ -13,5 +13,6 @@ import { McpService } from "./mcp.service";
   imports: [ProductsModule, RecipesModule, MealPlansModule, SelfCareRoutinesModule, ShoppingListModule, UsersModule, AuthModule],
   controllers: [McpController],
   providers: [McpService],
+  exports: [McpService],
 })
 export class McpModule {}

@@ -1,4 +1,6 @@
+import { AiModule } from "./ai/ai.module";
 import { Module } from "@nestjs/common";
+import { AiAccessModule } from "./ai-access/ai-access.module";
 import { AuthModule } from "./auth/auth.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { HealthController } from "./health/health.controller";
@@ -13,6 +15,8 @@ import { UsersModule } from "./users/users.module";
 @Module({
   imports: [
     PrismaModule,
+    AiModule,
+    AiAccessModule,
     ProductsModule,
     RecipesModule,
     MealPlansModule,

@@ -13,11 +13,11 @@ const profile = {
   goal: "LOSE",
   macroProfile: "BALANCED",
   targetFormula: "MIFFLIN_ST_JEOR",
-  calorieDelta: 400,
-  targetCalories: 1714,
+  calorieDelta: 200,
+  targetCalories: 1914,
   targetProteinG: 126,
   targetFatG: 50,
-  targetCarbsG: 190,
+  targetCarbsG: 240,
   availableTargetFormulas: TARGET_FORMULAS.map((formula) => ({ ...formula })),
 };
 
@@ -29,7 +29,7 @@ assert.strictEqual(result.profile.firstName, "Ira");
 assert.strictEqual(result.profile.targetFormula, "MIFFLIN_ST_JEOR");
 assert.strictEqual(result.profile.macroProfile, "BALANCED");
 assert.ok(result.profile.availableTargetFormulas.length >= 3);
-assert.strictEqual(result.targets.kcal, 1714);
+assert.strictEqual(result.targets.kcal, 1914);
 assert.ok(!("id" in (result as unknown as Record<string, unknown>)), "no id at top level");
 assert.ok(!("user" in (result as unknown as Record<string, unknown>)), "no user object");
 
