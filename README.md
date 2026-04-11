@@ -25,8 +25,17 @@ npm run build
 ## Environment
 Create `.env` from `.env.example`.
 
+For AI image uploads via Google Cloud Storage:
+- set `GCS_UPLOAD_BUCKET`
+- keep `GCS_UPLOAD_PUBLIC=false` to return a signed URL by default
+- set `GCS_UPLOAD_PUBLIC=true` only if your bucket objects are intentionally public
+- optionally tune `GCS_UPLOAD_URL_TTL_SECONDS`, `GCS_UPLOAD_MAX_FILE_BYTES`, `GCS_UPLOAD_PATH_PREFIX`
+- on Cloud Run, ensure the service account can write to the bucket
+- if you use signed URLs, ensure the service account can sign URLs in your environment
+
 ## REST Endpoints
 - `GET /health`
+- `POST /v1/ai/uploads/image`
 - `POST /v1/products`
 - `GET /v1/products?query=...`
 - `PATCH /v1/products/:productId`
