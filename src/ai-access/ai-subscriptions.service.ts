@@ -2,8 +2,14 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PrismaService } from "../common/prisma/prisma.service";
 import {
   AiFeature,
+  DEFAULT_ACTIVE_PLAN_MONTHLY_AI_ACTIONS,
+  DEFAULT_ACTIVE_PLAN_MONTHLY_TOKEN_LIMIT,
+  DEFAULT_ACTIVE_PLAN_PRICE_CENTS,
   DEFAULT_AI_ACTION_TOKEN_UNIT,
   DEFAULT_FREE_PLAN_CODE,
+  DEFAULT_FREE_PLAN_MONTHLY_AI_ACTIONS,
+  DEFAULT_FREE_PLAN_MONTHLY_TOKEN_LIMIT,
+  DEFAULT_FREE_PLAN_PRICE_CENTS,
   DEFAULT_PAID_PLAN_CODE,
   DEFAULT_TRIAL_DAYS,
   DEFAULT_TRIAL_TOKEN_LIMIT,
@@ -133,9 +139,9 @@ export class AiSubscriptionsService {
       id: "plan_free",
       name: "Free",
       code: DEFAULT_FREE_PLAN_CODE,
-      monthlyTokenLimit: 25_000,
-      monthlyAiActions: 5,
-      priceCents: 0,
+      monthlyTokenLimit: this.getFreePlanMonthlyTokenLimit(),
+      monthlyAiActions: this.getFreePlanMonthlyAiActions(),
+      priceCents: this.getFreePlanPriceCents(),
       currency: "USD",
       isActive: true,
       features: [
@@ -147,9 +153,9 @@ export class AiSubscriptionsService {
       id: "plan_pro",
       name: "Pro",
       code: DEFAULT_PAID_PLAN_CODE,
-      monthlyTokenLimit: 500_000,
-      monthlyAiActions: 100,
-      priceCents: 999,
+      monthlyTokenLimit: this.getActivePlanMonthlyTokenLimit(),
+      monthlyAiActions: this.getActivePlanMonthlyAiActions(),
+      priceCents: this.getActivePlanPriceCents(),
       currency: "USD",
       isActive: true,
       features: [
@@ -426,12 +432,36 @@ export class AiSubscriptionsService {
     return Number(process.env.AI_ACTION_TOKEN_UNIT ?? DEFAULT_AI_ACTION_TOKEN_UNIT);
   }
 
+  private getFreePlanMonthlyTokenLimit() {
+    return this.getPositiveIntEnv("AI_FREE_PLAN_MONTHLY_TOKEN_LIMIT", DEFAULT_FREE_PLAN_MONTHLY_TOKEN_LIMIT);
+  }
+
+  private getFreePlanMonthlyAiActions() {
+    return this.getPositiveIntEnv("AI_FREE_PLAN_MONTHLY_AI_ACTIONS", DEFAULT_FREE_PLAN_MONTHLY_AI_ACTIONS);
+  }
+
+  private getFreePlanPriceCents() {
+    return this.getNonNegativeIntEnv("AI_FREE_PLAN_PRICE_CENTS", DEFAULT_FREE_PLAN_PRICE_CENTS);
+  }
+
+  private getActivePlanMonthlyTokenLimit() {
+    return this.getPositiveIntEnv("AI_ACTIVE_PLAN_MONTHLY_TOKEN_LIMIT", DEFAULT_ACTIVE_PLAN_MONTHLY_TOKEN_LIMIT);
+  }
+
+  private getActivePlanMonthlyAiActions() {
+    return this.getPositiveIntEnv("AI_ACTIVE_PLAN_MONTHLY_AI_ACTIONS", DEFAULT_ACTIVE_PLAN_MONTHLY_AI_ACTIONS);
+  }
+
+  private getActivePlanPriceCents() {
+    return this.getNonNegativeIntEnv("AI_ACTIVE_PLAN_PRICE_CENTS", DEFAULT_ACTIVE_PLAN_PRICE_CENTS);
+  }
+
   private getTrialTokenLimit() {
-    return Number(process.env.AI_TRIAL_TOKEN_LIMIT ?? DEFAULT_TRIAL_TOKEN_LIMIT);
+    return this.getPositiveIntEnv("AI_TRIAL_TOKEN_LIMIT", DEFAULT_TRIAL_TOKEN_LIMIT);
   }
 
   private getTrialDays() {
-    return Number(process.env.AI_TRIAL_DAYS ?? DEFAULT_TRIAL_DAYS);
+    return this.getPositiveIntEnv("AI_TRIAL_DAYS", DEFAULT_TRIAL_DAYS);
   }
 
   private getDefaultFreePlanCode() {
@@ -453,5 +483,33 @@ export class AiSubscriptionsService {
     const value = new Date(now);
     value.setUTCDate(value.getUTCDate() + days);
     return value;
+  }
+
+  private getPositiveIntEnv(name: string, fallback: number) {
+    const raw = process.env[name]?.trim();
+    if (!raw) {
+      return fallback;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return fallback;
+    }
+
+    return parsed;
+  }
+
+  private getNonNegativeIntEnv(name: string, fallback: number) {
+    const raw = process.env[name]?.trim();
+    if (!raw) {
+      return fallback;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return fallback;
+    }
+
+    return parsed;
   }
 }

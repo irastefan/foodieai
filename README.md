@@ -33,6 +33,8 @@ For AI image uploads via Google Cloud Storage:
 - on Cloud Run, ensure the service account can write to the bucket
 - if you use signed URLs, ensure the service account can sign URLs in your environment
 
+AI plan and quota logic is documented in [docs/ai-plans.md](/home/irastefan/Documents/projects/fodieai/docs/ai-plans.md:1).
+
 ## REST Endpoints
 - `GET /health`
 - `POST /v1/ai/uploads/image`
