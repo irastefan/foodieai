@@ -12,7 +12,7 @@ async function bootstrap() {
     bodyParser: false,
   });
   const bodyLimit = process.env.BODY_LIMIT?.trim() || "20mb";
-  const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:5173,https://irastefan.github.io,https://smart-food-plan-web.vercel.app,https://wellin.io")
+  const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:5173,https://irastefan.github.io,https://smart-food-plan-web.vercel.app,https://wellin.io,https://www.wellin.io")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
