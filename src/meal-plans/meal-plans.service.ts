@@ -4,6 +4,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { AddMealPlanEntryDto } from "./dto/add-meal-plan-entry.dto";
 import { CopyMealPlanSlotDto } from "./dto/copy-meal-plan-slot.dto";
 import { GetMealPlanHistoryDto } from "./dto/get-meal-plan-history.dto";
+import { GetMealPlanStatsDto } from "./dto/get-meal-plan-stats.dto";
 
 type NutritionTotals = {
   calories: number;
@@ -36,6 +37,15 @@ type MealPlanHistoryItem = {
   nutritionPer100: NutritionPer100 | null;
   nutritionTotal: NutritionTotals;
 };
+
+type NutritionGoals = {
+  calories: number | null;
+  protein: number | null;
+  fat: number | null;
+  carbs: number | null;
+};
+
+type MealPlanStatsPeriod = "week" | "month" | "custom";
 
 const SLOT_ORDER = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"] as const;
 type MealSlotName = (typeof SLOT_ORDER)[number];
@@ -272,6 +282,89 @@ export class MealPlansService {
     };
   }
 
+  async getStats(userId: string, dto: GetMealPlanStatsDto = {}) {
+    const range = this.resolveStatsRange(dto);
+    const [days, profile] = await Promise.all([
+      (this.prisma as any).mealPlanDay.findMany({
+        where: {
+          ownerUserId: userId,
+          date: {
+            gte: range.from,
+            lte: range.to,
+          },
+        },
+        orderBy: { date: "asc" },
+        select: {
+          date: true,
+          nutritionTotal: true,
+        },
+      }),
+      (this.prisma as any).userProfile.findUnique({
+        where: { userId },
+        select: {
+          targetCalories: true,
+          targetProteinG: true,
+          targetFatG: true,
+          targetCarbsG: true,
+        },
+      }),
+    ]);
+
+    const dailyByKey = new Map<string, NutritionTotals>();
+    for (const day of days) {
+      const key = day.date.toISOString().slice(0, 10);
+      dailyByKey.set(key, this.parseNutrition(day.nutritionTotal) ?? this.emptyTotals());
+    }
+
+    const goals = this.formatNutritionGoals(profile);
+    const points: Array<{
+      date: string;
+      nutritionTotal: NutritionTotals;
+      goal: NutritionGoals;
+      hasEntries: boolean;
+    }> = [];
+    const totals = this.emptyTotals();
+
+    for (const current of this.listDatesInRange(range.from, range.to)) {
+      const key = current.toISOString().slice(0, 10);
+      const nutrition = dailyByKey.get(key) ?? this.emptyTotals();
+      totals.calories += nutrition.calories;
+      totals.protein += nutrition.protein;
+      totals.fat += nutrition.fat;
+      totals.carbs += nutrition.carbs;
+      points.push({
+        date: key,
+        nutritionTotal: nutrition,
+        goal: goals,
+        hasEntries: dailyByKey.has(key),
+      });
+    }
+
+    const dayCount = points.length || 1;
+    return {
+      period: range.period,
+      anchorDate: range.anchor.toISOString().slice(0, 10),
+      fromDate: range.from.toISOString().slice(0, 10),
+      toDate: range.to.toISOString().slice(0, 10),
+      daysCount: points.length,
+      goals,
+      totals,
+      averages: {
+        calories: totals.calories / dayCount,
+        protein: totals.protein / dayCount,
+        fat: totals.fat / dayCount,
+        carbs: totals.carbs / dayCount,
+      },
+      goalTotals: {
+        calories: goals.calories == null ? null : goals.calories * points.length,
+        protein: goals.protein == null ? null : goals.protein * points.length,
+        fat: goals.fat == null ? null : goals.fat * points.length,
+        carbs: goals.carbs == null ? null : goals.carbs * points.length,
+      },
+      points,
+    };
+  }
+
   async copySlot(userId: string, dto: CopyMealPlanSlotDto) {
     const sourceDate = this.parseDay(dto.sourceDate);
     const sourceSlot = this.parseSlot(dto.sourceSlot);
@@ -439,6 +532,60 @@ export class MealPlansService {
     return value;
   }
 
+  private startOfDay(date: Date) {
+    const value = new Date(date);
+    value.setUTCHours(0, 0, 0, 0);
+    return value;
+  }
+
+  private addDays(date: Date, days: number) {
+    const value = new Date(date);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value;
+  }
+
+  private listDatesInRange(from: Date, to: Date) {
+    const result: Date[] = [];
+    let current = this.startOfDay(from);
+    const end = this.startOfDay(to);
+    while (current.getTime() <= end.getTime()) {
+      result.push(current);
+      current = this.addDays(current, 1);
+    }
+    return result;
+  }
+
+  private resolveStatsRange(dto: GetMealPlanStatsDto) {
+    const period = dto.period ?? "week";
+    if (period === "custom") {
+      if (!dto.fromDate || !dto.toDate) {
+        throw new BadRequestException("fromDate and toDate are required for custom period");
+      }
+      const from = this.parseDay(dto.fromDate);
+      const toDay = this.parseDay(dto.toDate);
+      const to = this.endOfDay(toDay);
+      if (from.getTime() > to.getTime()) {
+        throw new BadRequestException("fromDate must be before or equal to toDate");
+      }
+      return {
+        period,
+        anchor: toDay,
+        from,
+        to,
+      };
+    }
+
+    const anchor = this.parseDay(dto.date);
+    const lengthDays = period === "month" ? 30 : 7;
+    const from = this.addDays(anchor, -(lengthDays - 1));
+    return {
+      period,
+      anchor,
+      from,
+      to: this.endOfDay(anchor),
+    };
+  }
+
   private normalizeQuery(query?: string) {
     if (typeof query !== "string") {
       return null;
@@ -541,6 +688,20 @@ export class MealPlansService {
       return null;
     }
     return { calories, protein, fat, carbs };
+  }
+
+  private formatNutritionGoals(profile: {
+    targetCalories?: number | null;
+    targetProteinG?: number | null;
+    targetFatG?: number | null;
+    targetCarbsG?: number | null;
+  } | null): NutritionGoals {
+    return {
+      calories: profile?.targetCalories ?? null,
+      protein: profile?.targetProteinG ?? null,
+      fat: profile?.targetFatG ?? null,
+      carbs: profile?.targetCarbsG ?? null,
+    };
   }
 
   private async recalculateDay(dayId: string) {

@@ -5,6 +5,7 @@ import { AddMealPlanEntryDto } from "./dto/add-meal-plan-entry.dto";
 import { CopyMealPlanSlotDto } from "./dto/copy-meal-plan-slot.dto";
 import { GetMealPlanDayDto } from "./dto/get-meal-plan-day.dto";
 import { GetMealPlanHistoryDto } from "./dto/get-meal-plan-history.dto";
+import { GetMealPlanStatsDto } from "./dto/get-meal-plan-stats.dto";
 import { RemoveMealPlanEntryDto } from "./dto/remove-meal-plan-entry.dto";
 import { MealPlansService } from "./meal-plans.service";
 
@@ -160,6 +161,48 @@ export class MealPlansController {
   ) {
     const userId = await this.authContext.getUserId(headers);
     return this.mealPlansService.getHistory(userId, query);
+  }
+
+  @Get("stats")
+  @ApiOperation({
+    summary: "Get nutrition statistics for a period",
+    description: "Returns daily and aggregated K/B/Zh/U statistics for the last 7 days, last 30 days, or a custom period.",
+  })
+  @ApiQuery({ name: "period", required: false, example: "week", enum: ["week", "month", "custom"] })
+  @ApiQuery({ name: "date", required: false, example: "2026-04-18" })
+  @ApiQuery({ name: "fromDate", required: false, example: "2026-04-01" })
+  @ApiQuery({ name: "toDate", required: false, example: "2026-04-18" })
+  @ApiOkResponse({
+    description: "Nutrition statistics by period",
+    schema: {
+      type: "object",
+      example: {
+        period: "week",
+        anchorDate: "2026-04-18",
+        fromDate: "2026-04-12",
+        toDate: "2026-04-18",
+        daysCount: 7,
+        goals: { calories: 1673, protein: 126, fat: 50, carbs: 240 },
+        totals: { calories: 11036, protein: 812, fat: 352, carbs: 1090 },
+        averages: { calories: 1576.57, protein: 116, fat: 50.29, carbs: 155.71 },
+        goalTotals: { calories: 11711, protein: 882, fat: 350, carbs: 1680 },
+        points: [
+          {
+            date: "2026-04-12",
+            hasEntries: true,
+            goal: { calories: 1673, protein: 126, fat: 50, carbs: 240 },
+            nutritionTotal: { calories: 1702, protein: 121, fat: 49, carbs: 168 },
+          },
+        ],
+      },
+    },
+  })
+  async getStats(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query() query: GetMealPlanStatsDto,
+  ) {
+    const userId = await this.authContext.getUserId(headers);
+    return this.mealPlansService.getStats(userId, query);
   }
 
   @Post("day/copy-slot")

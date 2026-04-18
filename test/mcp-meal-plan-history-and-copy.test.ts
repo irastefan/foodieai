@@ -3,6 +3,7 @@ import { McpService } from "../src/mcp/mcp.service";
 
 (async () => {
   const historyCalls: Array<{ userId: string; dto: Record<string, unknown> }> = [];
+  const statsCalls: Array<{ userId: string; dto: Record<string, unknown> }> = [];
   const copyCalls: Array<{ userId: string; dto: Record<string, unknown> }> = [];
 
   const service = new McpService(
@@ -12,6 +13,10 @@ import { McpService } from "../src/mcp/mcp.service";
       getDay: async () => null,
       getHistory: async (userId: string, dto: Record<string, unknown>) => {
         historyCalls.push({ userId, dto });
+        return { ok: true };
+      },
+      getStats: async (userId: string, dto: Record<string, unknown>) => {
+        statsCalls.push({ userId, dto });
         return { ok: true };
       },
       copySlot: async (userId: string, dto: Record<string, unknown>) => {
@@ -37,6 +42,11 @@ import { McpService } from "../src/mcp/mcp.service";
     targetDate: "2026-02-21",
     targetSlot: "snack",
   });
+  await service.getMealPlanStats("user_123", {
+    period: "custom",
+    fromDate: "2026-04-01",
+    toDate: "2026-04-18",
+  });
 
   assert.strictEqual(historyCalls.length, 1);
   assert.strictEqual(historyCalls[0]?.userId, "user_123");
@@ -44,6 +54,14 @@ import { McpService } from "../src/mcp/mcp.service";
     fromDate: "2026-02-01",
     toDate: "2026-03-01",
     query: "protein bar",
+  });
+
+  assert.strictEqual(statsCalls.length, 1);
+  assert.strictEqual(statsCalls[0]?.userId, "user_123");
+  assert.deepStrictEqual({ ...statsCalls[0]?.dto }, {
+    period: "custom",
+    fromDate: "2026-04-01",
+    toDate: "2026-04-18",
   });
 
   assert.strictEqual(copyCalls.length, 1);
@@ -73,6 +91,22 @@ import { McpService } from "../src/mcp/mcp.service";
     sourceSlot: "DINNER",
     targetDate: "2026-02-21",
     targetSlot: "LUNCH",
+  });
+
+  const statsToolResult = await service.executeTool(
+    "mealPlan.statsGet",
+    {
+      period: "week",
+      date: "2026-04-18",
+    },
+    { userId: "user_789", headers: {}, requestId: "req_2" },
+  );
+
+  assert.strictEqual(statsToolResult.text, "✅ Meal plan statistics loaded");
+  assert.strictEqual(statsCalls[1]?.userId, "user_789");
+  assert.deepStrictEqual({ ...statsCalls[1]?.dto }, {
+    period: "week",
+    date: "2026-04-18",
   });
 
   console.log("mcp-meal-plan-history-and-copy.test passed");

@@ -6,6 +6,7 @@ import { AddMealPlanEntryDto } from "../meal-plans/dto/add-meal-plan-entry.dto";
 import { CopyMealPlanSlotDto } from "../meal-plans/dto/copy-meal-plan-slot.dto";
 import { GetMealPlanDayDto } from "../meal-plans/dto/get-meal-plan-day.dto";
 import { GetMealPlanHistoryDto } from "../meal-plans/dto/get-meal-plan-history.dto";
+import { GetMealPlanStatsDto } from "../meal-plans/dto/get-meal-plan-stats.dto";
 import { RemoveMealPlanEntryDto } from "../meal-plans/dto/remove-meal-plan-entry.dto";
 import { MealPlansService } from "../meal-plans/meal-plans.service";
 import { CreateProductDto } from "../products/dto/create-product.dto";
@@ -946,6 +947,50 @@ export class McpService {
           };
         },
       },
+      "mealPlan.statsGet": {
+        name: "mealPlan.statsGet",
+        description:
+          "Get nutrition statistics for week, month, or a custom date range.\nUse for charts, totals, averages, and goal comparison by calories/protein/fat/carbs.\nReturns daily points plus aggregated totals.",
+        tags: ["meal-plans", "analytics", "nutrition"],
+        auth: "required",
+        public: false,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            period: { type: ["string", "null"], enum: ["week", "month", "custom", null] },
+            date: { type: ["string", "null"] },
+            fromDate: { type: ["string", "null"] },
+            toDate: { type: ["string", "null"] },
+          },
+          required: [],
+        },
+        outputSchema: { type: "object" },
+        examples: [
+          { summary: "Current week nutrition stats", arguments: { period: "week" } },
+          { summary: "Last 30 days ending on a date", arguments: { period: "month", date: "2026-04-18" } },
+          { summary: "Custom period stats", arguments: { period: "custom", fromDate: "2026-04-01", toDate: "2026-04-18" } },
+        ],
+        rpcExamples: [
+          {
+            summary: "tools/call",
+            request: {
+              jsonrpc: "2.0",
+              id: 243,
+              method: "tools/call",
+              params: { name: "mealPlan.statsGet", arguments: { period: "week", date: "2026-04-18" } },
+            },
+          },
+        ],
+        dtoClass: GetMealPlanStatsDto,
+        handler: async (args, context) => {
+          const stats = await this.getMealPlanStats(context.userId as string, args);
+          return {
+            text: "✅ Meal plan statistics loaded",
+            json: stats,
+          };
+        },
+      },
       "mealPlan.copySlot": {
         name: "mealPlan.copySlot",
         description:
@@ -1677,6 +1722,11 @@ export class McpService {
   async getMealPlanHistory(userId: string, args: Record<string, unknown>) {
     const dto = await this.validateMcpDto(GetMealPlanHistoryDto, args);
     return this.mealPlansService.getHistory(userId, dto);
+  }
+
+  async getMealPlanStats(userId: string, args: Record<string, unknown>) {
+    const dto = await this.validateMcpDto(GetMealPlanStatsDto, args);
+    return this.mealPlansService.getStats(userId, dto);
   }
 
   async copyMealPlanSlot(userId: string, args: Record<string, unknown>) {
