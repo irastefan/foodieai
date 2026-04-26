@@ -72,11 +72,10 @@ export class UsersService {
     private readonly aiSubscriptionsService: AiSubscriptionsService,
   ) {}
 
-  async createWithEmail(email: string, passwordHash: string) {
+  async createWithEmail(email: string) {
     const user = await (this.prisma as any).user.create({
       data: {
         email,
-        passwordHash,
         externalId: email,
       },
       select: { id: true, email: true },

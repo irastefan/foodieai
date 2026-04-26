@@ -25,6 +25,12 @@ npm run build
 ## Environment
 Create `.env` from `.env.example`.
 
+Auth by email code:
+- set `JWT_SECRET` (required, min 16 chars)
+- optionally set `AUTH_CODE_SALT` (defaults to `JWT_SECRET`)
+- optionally set `AUTH_EMAIL_WEBHOOK_URL` to send emails via your mail service webhook (`POST` JSON: `{ to, subject, text, purpose }`)
+- if `AUTH_EMAIL_WEBHOOK_URL` is not set, one-time codes are logged to server stdout (dev fallback)
+
 For AI image uploads via Google Cloud Storage:
 - set `GCS_UPLOAD_BUCKET`
 - keep `GCS_UPLOAD_PUBLIC=false` to return a signed URL by default
@@ -37,6 +43,10 @@ AI plan and quota logic is documented in [docs/ai-plans.md](/home/irastefan/Docu
 
 ## REST Endpoints
 - `GET /health`
+- `POST /v1/auth/register/request-code`
+- `POST /v1/auth/register`
+- `POST /v1/auth/login/request-code`
+- `POST /v1/auth/login`
 - `POST /v1/ai/uploads/image`
 - `POST /v1/products`
 - `GET /v1/products?query=...`
