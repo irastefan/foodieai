@@ -1,16 +1,23 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { AuthCodePurpose } from "@prisma/client";
+import { createHash, createHmac, randomInt, timingSafeEqual } from "crypto";
+import { PrismaService } from "../common/prisma/prisma.service";
 import { UsersService } from "../users/users.service";
-import { LoginDto } from "./dto/login.dto";
-import { RegisterDto } from "./dto/register.dto";
+import { RequestEmailCodeDto } from "./dto/request-email-code.dto";
+import { VerifyEmailCodeDto } from "./dto/verify-email-code.dto";
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const EMAIL_CODE_TTL_MINUTES = 10;
+const MAX_VERIFY_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async register(dto: RegisterDto) {
+  async requestRegisterCode(dto: RequestEmailCodeDto) {
     const email = this.normalizeEmail(dto.email);
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
@@ -20,8 +27,23 @@ export class AuthService {
       });
     }
 
-    const passwordHash = this.hashPassword(dto.password);
-    const user = await this.usersService.createWithEmail(email, passwordHash);
+    const code = await this.createEmailCode(email, AuthCodePurpose.REGISTER);
+    await this.sendCodeToEmail(email, code, "registration");
+    return { ok: true };
+  }
+
+  async register(dto: VerifyEmailCodeDto) {
+    const email = this.normalizeEmail(dto.email);
+    const existing = await this.usersService.findByEmail(email);
+    if (existing) {
+      throw new BadRequestException({
+        code: "EMAIL_ALREADY_EXISTS",
+        message: "Email is already registered",
+      });
+    }
+
+    await this.verifyEmailCode(email, dto.code, AuthCodePurpose.REGISTER);
+    const user = await this.usersService.createWithEmail(email);
     const accessToken = this.issueAccessToken(user.id, user.email);
 
     return {
@@ -30,15 +52,32 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
+  async requestLoginCode(dto: RequestEmailCodeDto) {
     const email = this.normalizeEmail(dto.email);
     const user = await this.usersService.findByEmail(email);
-    if (!user || !user.passwordHash || !this.verifyPassword(dto.password, user.passwordHash)) {
+    if (!user) {
       throw new UnauthorizedException({
         code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password",
+        message: "Invalid email or code",
       });
     }
+
+    const code = await this.createEmailCode(email, AuthCodePurpose.LOGIN);
+    await this.sendCodeToEmail(email, code, "login");
+    return { ok: true };
+  }
+
+  async login(dto: VerifyEmailCodeDto) {
+    const email = this.normalizeEmail(dto.email);
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid email or code",
+      });
+    }
+
+    await this.verifyEmailCode(email, dto.code, AuthCodePurpose.LOGIN);
 
     const accessToken = this.issueAccessToken(user.id, user.email);
     return {
@@ -107,21 +146,94 @@ export class AuthService {
     return email.trim().toLowerCase();
   }
 
-  private hashPassword(password: string) {
-    const salt = randomBytes(16).toString("hex");
-    const derived = scryptSync(password, salt, 64).toString("hex");
-    return `${salt}:${derived}`;
+  private async createEmailCode(email: string, purpose: AuthCodePurpose) {
+    const code = this.generateCode();
+    const expiresAt = new Date(Date.now() + EMAIL_CODE_TTL_MINUTES * 60_000);
+
+    await (this.prisma as any).authEmailCode.deleteMany({ where: { email, purpose } });
+    await (this.prisma as any).authEmailCode.create({
+      data: {
+        email,
+        purpose,
+        codeHash: this.hashCode(code),
+        expiresAt,
+      },
+    });
+
+    return code;
   }
 
-  private verifyPassword(password: string, hash: string) {
-    const [salt, stored] = hash.split(":");
-    if (!salt || !stored) {
-      return false;
+  private async verifyEmailCode(email: string, code: string, purpose: AuthCodePurpose) {
+    const record = await (this.prisma as any).authEmailCode.findUnique({
+      where: {
+        email_purpose: { email, purpose },
+      },
+    });
+
+    if (!record || record.expiresAt.getTime() < Date.now()) {
+      if (record) {
+        await (this.prisma as any).authEmailCode.delete({ where: { id: record.id } });
+      }
+      throw new UnauthorizedException({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid email or code",
+      });
     }
-    const derived = scryptSync(password, salt, 64).toString("hex");
-    const lhs = Buffer.from(stored);
-    const rhs = Buffer.from(derived);
-    return lhs.length === rhs.length && timingSafeEqual(lhs, rhs);
+
+    if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
+      await (this.prisma as any).authEmailCode.delete({ where: { id: record.id } });
+      throw new UnauthorizedException({
+        code: "TOO_MANY_ATTEMPTS",
+        message: "Too many invalid attempts. Request a new code",
+      });
+    }
+
+    if (record.codeHash !== this.hashCode(code)) {
+      await (this.prisma as any).authEmailCode.update({
+        where: { id: record.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid email or code",
+      });
+    }
+
+    await (this.prisma as any).authEmailCode.delete({ where: { id: record.id } });
+  }
+
+  private generateCode() {
+    return String(randomInt(0, 1_000_000)).padStart(6, "0");
+  }
+
+  private hashCode(code: string) {
+    const salt = this.getEmailCodeSalt();
+    return createHash("sha256").update(`${salt}:${code}`).digest("hex");
+  }
+
+  private async sendCodeToEmail(email: string, code: string, purpose: "registration" | "login") {
+    const subject = `FoodieAI ${purpose} code`;
+    const text = `Your FoodieAI ${purpose} code is ${code}. It expires in ${EMAIL_CODE_TTL_MINUTES} minutes.`;
+    const webhookUrl = process.env.AUTH_EMAIL_WEBHOOK_URL?.trim();
+
+    if (!webhookUrl) {
+      console.info("[auth] AUTH_EMAIL_WEBHOOK_URL is not set. Email code fallback log", {
+        email,
+        purpose,
+        code,
+      });
+      return;
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: email, subject, text, purpose }),
+    });
+
+    if (!response.ok) {
+      throw new BadRequestException("Failed to send one-time code to email");
+    }
   }
 
   private sign(value: string, secret: string) {
@@ -147,6 +259,14 @@ export class AuthService {
     const secret = process.env.JWT_SECRET;
     if (!secret || secret.trim().length < 16) {
       throw new BadRequestException("JWT_SECRET must be configured and at least 16 characters");
+    }
+    return secret;
+  }
+
+  private getEmailCodeSalt() {
+    const secret = process.env.AUTH_CODE_SALT?.trim() || process.env.JWT_SECRET?.trim();
+    if (!secret || secret.length < 16) {
+      throw new BadRequestException("AUTH_CODE_SALT or JWT_SECRET must be configured and at least 16 characters");
     }
     return secret;
   }

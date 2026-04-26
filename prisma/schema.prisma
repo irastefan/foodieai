@@ -97,10 +97,15 @@ enum RoutineWeekday {
   SUNDAY
 }
 
+enum AuthCodePurpose {
+  REGISTER
+  LOGIN
+}
+
 model User {
   id                 String             @id @default(cuid())
   email              String             @unique
-  passwordHash       String
+  passwordHash       String?
   externalId         String?            @unique
   createdAt          DateTime           @default(now())
   profile            UserProfile?
@@ -113,6 +118,19 @@ model User {
   products           Product[]
   recipes            Recipe[]
   selfCareSlots      SelfCareRoutineSlot[]
+}
+
+model AuthEmailCode {
+  id        String          @id @default(cuid())
+  email     String
+  purpose   AuthCodePurpose
+  codeHash  String
+  attempts  Int             @default(0)
+  expiresAt DateTime
+  createdAt DateTime        @default(now())
+
+  @@unique([email, purpose])
+  @@index([expiresAt])
 }
 
 model UserProfile {
